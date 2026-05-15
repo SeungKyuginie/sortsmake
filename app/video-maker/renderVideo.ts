@@ -14,6 +14,9 @@ export type RenderInput = {
   captions: string[]; // per-image caption (optional, may be empty strings)
   audio: Blob;
   audioDurationSec: number;
+  bgm?: Blob | null;
+  bgmVolume?: number; // 0..1, default 0.18
+  voiceVolume?: number; // 0..1, default 1
 };
 
 export type RenderProgress = {
@@ -95,7 +98,15 @@ export async function renderVideo(
   input: RenderInput,
   onProgress: (p: RenderProgress) => void,
 ): Promise<Blob> {
-  const { images, captions, audio, audioDurationSec } = input;
+  const {
+    images,
+    captions,
+    audio,
+    audioDurationSec,
+    bgm,
+    bgmVolume = 0.18,
+    voiceVolume = 1.0,
+  } = input;
   if (images.length === 0) throw new Error('이미지가 없습니다.');
   if (!audioDurationSec || audioDurationSec <= 0)
     throw new Error('오디오 길이를 알 수 없습니다.');
@@ -131,21 +142,46 @@ export async function renderVideo(
   const audioData = await fetchFile(audio);
   await ffmpeg.writeFile('audio.mp3', audioData);
 
+  let bgmFile: string | null = null;
+  if (bgm) {
+    onProgress({ ratio: 0.1, message: '배경음악 업로드 중…' });
+    const bgmData = await fetchFile(bgm);
+    // ffmpeg picks the right demuxer from file content; extension is just a label.
+    bgmFile = 'bgm.bin';
+    await ffmpeg.writeFile(bgmFile, bgmData);
+  }
+
   onProgress({ ratio: 0.18, message: '필터 그래프 구성 중…' });
-  const filter = buildFilterGraph(images.length, perImageDuration, captions);
+  const videoFilter = buildFilterGraph(
+    images.length,
+    perImageDuration,
+    captions,
+  );
+
+  const voiceIdx = images.length;
+  const bgmIdx = images.length + 1;
+  const audioMixFilter = bgmFile
+    ? `;[${voiceIdx}:a]volume=${voiceVolume}[vc];` +
+      `[${bgmIdx}:a]aloop=loop=-1:size=2e9,volume=${bgmVolume},` +
+      `afade=t=in:st=0:d=0.6,afade=t=out:st=${Math.max(0, audioDurationSec - 0.8).toFixed(3)}:d=0.8[bg];` +
+      `[vc][bg]amix=inputs=2:duration=first:dropout_transition=0[aout]`
+    : '';
+  const filter = videoFilter + audioMixFilter;
+  const audioMap = bgmFile ? '[aout]' : `${voiceIdx}:a`;
 
   const args: string[] = [];
   for (let i = 0; i < images.length; i++) {
     args.push('-loop', '1', '-t', String(perImageDuration), '-i', `img${i}.jpg`);
   }
   args.push('-i', 'audio.mp3');
+  if (bgmFile) args.push('-i', bgmFile);
   args.push(
     '-filter_complex',
     filter,
     '-map',
     '[vout]',
     '-map',
-    `${images.length}:a`,
+    audioMap,
     '-c:v',
     'libx264',
     '-pix_fmt',
@@ -178,6 +214,7 @@ export async function renderVideo(
       await ffmpeg.deleteFile(`img${i}.jpg`);
     }
     await ffmpeg.deleteFile('audio.mp3');
+    if (bgmFile) await ffmpeg.deleteFile(bgmFile);
     await ffmpeg.deleteFile('out.mp4');
   } catch {
     /* noop */

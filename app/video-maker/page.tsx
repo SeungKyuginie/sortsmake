@@ -59,6 +59,19 @@ export default function VideoMakerPage() {
     };
   }, [audioUrl]);
 
+  // bgm
+  const [bgmFile, setBgmFile] = useState<File | null>(null);
+  const [bgmVolume, setBgmVolume] = useState(0.18);
+  const bgmUrl = useMemo(
+    () => (bgmFile ? URL.createObjectURL(bgmFile) : null),
+    [bgmFile],
+  );
+  useEffect(() => {
+    return () => {
+      if (bgmUrl) URL.revokeObjectURL(bgmUrl);
+    };
+  }, [bgmUrl]);
+
   // render
   const [rendering, setRendering] = useState(false);
   const [renderRatio, setRenderRatio] = useState(0);
@@ -224,6 +237,8 @@ export default function VideoMakerPage() {
           ),
           audio: audioBlob,
           audioDurationSec: audioDuration,
+          bgm: bgmFile,
+          bgmVolume,
         },
         ({ ratio, message }) => {
           setRenderRatio(ratio);
@@ -280,8 +295,8 @@ export default function VideoMakerPage() {
           마트 숏츠 메이커 🎬
         </h1>
         <p className="mt-1 text-sm text-gray-600">
-          사진과 코너 설명만 입력하면 Claude가 스크립트를, CLOVA가 음성을, FFmpeg WASM이
-          1080×1920 숏츠 영상을 만들어 드립니다.
+          사진을 업로드하면 Claude가 보고 스크립트를, Google TTS가 음성을, FFmpeg WASM이
+          BGM과 함께 1080×1920 숏츠 영상을 만들어 드립니다.
         </p>
       </header>
 
@@ -421,6 +436,95 @@ export default function VideoMakerPage() {
         {audioUrl ? (
           <audio className="mt-4 w-full" controls src={audioUrl} />
         ) : null}
+      </section>
+
+      {/* Step 3.5: BGM */}
+      <section className="card mb-6">
+        <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold">
+              3-2. 배경음악 (선택)
+            </h2>
+            <p className="text-sm text-gray-500">
+              MP3/WAV 파일을 업로드하면 음성과 함께 믹스됩니다. 음성 길이에
+              맞춰 자동 루프되고, 시작/끝에 페이드가 들어갑니다. 저작권 무료
+              음원은{' '}
+              <a
+                href="https://pixabay.com/music/"
+                target="_blank"
+                rel="noreferrer"
+                className="text-brand-600 underline"
+              >
+                Pixabay Music
+              </a>
+              ,{' '}
+              <a
+                href="https://studio.youtube.com/channel/UC/music"
+                target="_blank"
+                rel="noreferrer"
+                className="text-brand-600 underline"
+              >
+                YouTube Audio Library
+              </a>
+              에서 받을 수 있습니다.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="btn-secondary cursor-pointer">
+              {bgmFile ? '음악 교체' : '음악 업로드'}
+              <input
+                type="file"
+                accept="audio/*"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0] ?? null;
+                  setBgmFile(f);
+                  e.target.value = '';
+                }}
+              />
+            </label>
+            {bgmFile ? (
+              <button
+                type="button"
+                className="btn-secondary text-red-600"
+                onClick={() => setBgmFile(null)}
+              >
+                제거
+              </button>
+            ) : null}
+          </div>
+        </div>
+        {bgmFile ? (
+          <div className="space-y-3">
+            <div className="text-sm text-gray-700">
+              🎵 {bgmFile.name} · {(bgmFile.size / 1024 / 1024).toFixed(1)} MB
+            </div>
+            {bgmUrl ? (
+              <audio className="w-full" controls src={bgmUrl} />
+            ) : null}
+            <div>
+              <label className="label">
+                BGM 볼륨 ({Math.round(bgmVolume * 100)}% — 음성 대비)
+              </label>
+              <input
+                type="range"
+                min={0}
+                max={0.6}
+                step={0.02}
+                value={bgmVolume}
+                onChange={(e) => setBgmVolume(Number(e.target.value))}
+                className="w-full"
+              />
+              <div className="mt-1 text-xs text-gray-500">
+                권장: 15~25%. 너무 크면 나레이션이 묻힙니다.
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-lg border border-dashed border-gray-300 p-4 text-center text-sm text-gray-500">
+            배경음악 없이도 영상 생성은 가능합니다.
+          </div>
+        )}
       </section>
 
       {/* Step 4: render */}
