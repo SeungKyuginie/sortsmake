@@ -540,8 +540,16 @@ export default function VideoMakerPage() {
               💡 다중 보이스 모드: 스크립트에{' '}
               <code className="rounded bg-white px-1">[A]</code>{' '}
               <code className="rounded bg-white px-1">[B]</code> 같은 태그를 넣으면
-              해당 화자 보이스로 읽힙니다. 스크립트를 새로 생성하면 Claude가
-              자동으로 화자를 분배해 줘요.
+              해당 화자 보이스로 읽힙니다.
+              {script && !/\[[A-D]\]/.test(script) ? (
+                <>
+                  {' '}
+                  현재 스크립트에 화자 태그가 없어요 — <b>2. 스크립트 다시 생성</b>을
+                  눌러주세요. (이미 다중 모드로 토글된 상태니까 Claude가 자동으로 박아줍니다.)
+                </>
+              ) : (
+                <> 스크립트를 새로 생성하면 Claude가 자동으로 화자를 분배해 줘요.</>
+              )}
             </div>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
               {Object.keys(multiVoices).map((tag) => (

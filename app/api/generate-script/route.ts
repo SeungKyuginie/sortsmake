@@ -99,18 +99,36 @@ export async function POST(req: Request) {
   }
 
   const multiSpeakerRule = isMultiSpeaker
-    ? `\n- 다중 화자 모드: 화자 ${speakerTags.join(', ')} 가 번갈아 말합니다.\n` +
-      `  각 발화 앞에 반드시 [${speakerTags[0]}], [${speakerTags[1]}] 같은 태그를 붙이세요. 예: "[A] 안녕하세요 [B] 오늘은 특가의 날!".\n` +
-      `  자연스럽게 핑퐁(질문/대답, 소개/반응) 형태로 구성하되, 한 화자가 너무 길게 독점하지 않게 분배하세요.`
+    ? `\n- ★ 다중 화자 모드 (반드시 적용): 화자 ${speakerTags.join(', ')} 가 번갈아 말합니다.\n` +
+      `  모든 발화 앞에 [${speakerTags.map((t) => `${t}`).join('], [')}] 중 하나를 정확히 한 번씩 붙이세요.\n` +
+      `  발화 단위는 한 문장 또는 짧은 두 문장. 한 화자가 3문장 이상 연속으로 말하지 않게 분배하세요.\n` +
+      `  태그 없는 문장이 한 줄이라도 있으면 안 됩니다.`
     : '';
 
   const cornerMarkerRule =
     corners.length > 1
-      ? `\n- 코너 동기화 마커: 각 코너 설명을 시작할 때 반드시 [#1], [#2], ... [#${corners.length}] 마커를 그 위치에 정확히 한 번씩 모두 사용하세요.\n` +
-        `  예: "여러분 안녕하세요! [#1] 신선한 사과가 도착했어요. [#2] 정육 코너에서는 한우 30% 할인. [#3] 지금 장보러 오세요!"\n` +
+      ? `\n- ★ 코너 동기화 마커 (반드시 적용): 각 코너 설명이 시작되는 자리에 [#1], [#2], ... [#${corners.length}] 를 정확히 한 번씩 모두 넣으세요.\n` +
         `  도입(인사)은 [#1] 앞에 두고, 마무리 콜투액션은 [#${corners.length}] 뒤에 두세요.\n` +
-        `  코너별 분량은 비슷하게 맞추되, 강조할 코너가 명확하면 약간 차이는 둘 수 있습니다. 단, 너무 짧지(2초 미만)도 너무 길지(10초 초과)도 않게.`
+        `  코너별 분량은 비슷하게 맞추세요 (한 코너가 너무 짧거나 너무 길지 않게).`
       : '';
+
+  let combinedExample = '';
+  if (isMultiSpeaker && corners.length > 1) {
+    const a = speakerTags[0];
+    const b = speakerTags[1] ?? speakerTags[0];
+    combinedExample =
+      `\n- ★ 출력 형식 예시 (코너 마커 + 화자 태그를 함께 사용):\n` +
+      `  [${a}] 여러분 안녕하세요! [#1] [${b}] 신선한 사과가 도착했어요. [${a}] 1.5kg 9,900원! ` +
+      `[#2] [${b}] 정육 코너 한우 등심 30% 할인. [${a}] 놓치지 마세요. [#3] [${b}] 지금 바로 ${storeName}으로!\n` +
+      `  → 코너 마커 [#i] 와 화자 태그 [${a}]/[${b}] 가 같은 문장 안에 함께 등장할 수 있습니다.`;
+  } else if (corners.length > 1) {
+    combinedExample =
+      `\n- 출력 형식 예시: "여러분 안녕하세요! [#1] 신선한 사과가 도착했어요. [#2] 정육 한우 30% 할인. [#3] 지금 장보러 오세요!"`;
+  } else if (isMultiSpeaker) {
+    const a = speakerTags[0];
+    const b = speakerTags[1] ?? speakerTags[0];
+    combinedExample = `\n- 출력 형식 예시: "[${a}] 안녕하세요 [${b}] 오늘 특가는요? [${a}] 사과 1.5kg 9,900원!"`;
+  }
 
   userBlocks.push({
     type: 'text',
@@ -122,7 +140,8 @@ export async function POST(req: Request) {
       `- 가격/특가 표현은 사진이나 힌트에 명확히 보일 때만 인용 (없는 가격을 지어내지 말 것)\n` +
       `- 결과는 나레이션 본문만 평문으로 출력 (제목/머리말/마크다운/따옴표 금지)` +
       multiSpeakerRule +
-      cornerMarkerRule,
+      cornerMarkerRule +
+      combinedExample,
   });
 
   const client = new Anthropic({ apiKey });
