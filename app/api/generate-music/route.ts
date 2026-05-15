@@ -55,6 +55,8 @@ export async function POST(req: Request) {
 
     if (!res.ok) {
       const errText = await res.text();
+      // 서버 콘솔에도 그대로 찍어 두면 디버깅이 쉬워집니다.
+      console.error('[ElevenLabs Music] non-ok response', res.status, errText);
       return NextResponse.json(
         { error: `ElevenLabs Music 오류 (${res.status}): ${errText}` },
         { status: 502 },

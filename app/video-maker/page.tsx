@@ -73,6 +73,7 @@ export default function VideoMakerPage() {
     'Upbeat, cheerful Korean retail store background music. Light percussion, bright marimba, friendly and energetic. Instrumental only. Suitable for a 30-second mart promotional shorts video.',
   );
   const [bgmGenLoading, setBgmGenLoading] = useState(false);
+  const [bgmError, setBgmError] = useState<string | null>(null);
   const bgmUrl = useMemo(
     () => (bgmFile ? URL.createObjectURL(bgmFile) : null),
     [bgmFile],
@@ -85,6 +86,7 @@ export default function VideoMakerPage() {
 
   const handleGenerateBgm = async () => {
     setError(null);
+    setBgmError(null);
     setBgmGenLoading(true);
     try {
       // 음성 길이가 있으면 그에 맞춰 생성, 없으면 영상 길이 사용
@@ -112,6 +114,7 @@ export default function VideoMakerPage() {
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'BGM 생성 실패';
       setError(msg);
+      setBgmError(msg);
     } finally {
       setBgmGenLoading(false);
     }
@@ -698,6 +701,12 @@ export default function VideoMakerPage() {
             >
               {bgmGenLoading ? 'AI 음악 생성 중… (보통 20~40초)' : bgmFile ? '다시 생성' : '음악 생성하기'}
             </button>
+            {bgmError ? (
+              <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800">
+                <div className="mb-1 font-semibold">음악 생성 실패</div>
+                <pre className="whitespace-pre-wrap break-all">{bgmError}</pre>
+              </div>
+            ) : null}
           </div>
         )}
 
