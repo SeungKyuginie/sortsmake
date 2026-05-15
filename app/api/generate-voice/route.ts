@@ -4,20 +4,23 @@ export const runtime = 'nodejs';
 
 type RequestBody = {
   text: string;
-  speaker?: string;
-  speed?: number;
-  volume?: number;
+  voiceName?: string;
+  speakingRate?: number;
   pitch?: number;
-  emotion?: number;
-  format?: 'mp3' | 'wav';
 };
 
+const ALLOWED_VOICES = new Set([
+  'ko-KR-Wavenet-A',
+  'ko-KR-Wavenet-B',
+  'ko-KR-Wavenet-C',
+  'ko-KR-Wavenet-D',
+]);
+
 export async function POST(req: Request) {
-  const clientId = process.env.CLOVA_CLIENT_ID;
-  const clientSecret = process.env.CLOVA_CLIENT_SECRET;
-  if (!clientId || !clientSecret) {
+  const apiKey = process.env.GOOGLE_TTS_API_KEY;
+  if (!apiKey) {
     return NextResponse.json(
-      { error: 'CLOVA_CLIENT_ID / CLOVA_CLIENT_SECRET가 설정되지 않았습니다.' },
+      { error: 'GOOGLE_TTS_API_KEY가 설정되지 않았습니다.' },
       { status: 500 },
     );
   }
@@ -33,47 +36,57 @@ export async function POST(req: Request) {
   if (!text) {
     return NextResponse.json({ error: '변환할 텍스트가 비어 있습니다.' }, { status: 400 });
   }
-  // CLOVA Voice Premium API 최대 길이 보호
-  if (text.length > 2000) {
+  // Google TTS 단일 요청 한도(5000자) 보호
+  if (text.length > 4500) {
     return NextResponse.json(
-      { error: '텍스트가 너무 깁니다 (최대 2000자).' },
+      { error: '텍스트가 너무 깁니다 (최대 4500자).' },
       { status: 400 },
     );
   }
 
-  const params = new URLSearchParams({
-    speaker: body.speaker ?? 'nara',
-    speed: String(body.speed ?? 0),
-    volume: String(body.volume ?? 0),
-    pitch: String(body.pitch ?? 0),
-    emotion: String(body.emotion ?? 0),
-    format: body.format ?? 'mp3',
-    text,
-  });
+  const voiceName =
+    body.voiceName && ALLOWED_VOICES.has(body.voiceName)
+      ? body.voiceName
+      : 'ko-KR-Wavenet-A';
+  const speakingRate = Math.min(4, Math.max(0.25, body.speakingRate ?? 1.0));
+  const pitch = Math.min(20, Math.max(-20, body.pitch ?? 0));
 
   try {
     const res = await fetch(
-      'https://naveropenapi.apigw.ntruss.com/tts-premium/v1/tts',
+      `https://texttospeech.googleapis.com/v1/text:synthesize?key=${encodeURIComponent(apiKey)}`,
       {
         method: 'POST',
-        headers: {
-          'X-NCP-APIGW-API-KEY-ID': clientId,
-          'X-NCP-APIGW-API-KEY': clientSecret,
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: params.toString(),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          input: { text },
+          voice: { languageCode: 'ko-KR', name: voiceName },
+          audioConfig: {
+            audioEncoding: 'MP3',
+            speakingRate,
+            pitch,
+            sampleRateHertz: 24000,
+          },
+        }),
       },
     );
 
     if (!res.ok) {
       const errText = await res.text();
       return NextResponse.json(
-        { error: `CLOVA Voice 오류 (${res.status}): ${errText}` },
+        { error: `Google TTS 오류 (${res.status}): ${errText}` },
         { status: 502 },
       );
     }
 
-    const audio = await res.arrayBuffer();
+    const data = (await res.json()) as { audioContent?: string };
+    if (!data.audioContent) {
+      return NextResponse.json(
+        { error: 'Google TTS 응답에 오디오가 없습니다.' },
+        { status: 502 },
+      );
+    }
+
+    const audio = Buffer.from(data.audioContent, 'base64');
     return new NextResponse(audio, {
       status: 200,
       headers: {
@@ -83,7 +96,7 @@ export async function POST(req: Request) {
       },
     });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'CLOVA Voice 호출 실패';
+    const msg = err instanceof Error ? err.message : 'Google TTS 호출 실패';
     return NextResponse.json({ error: msg }, { status: 502 });
   }
 }

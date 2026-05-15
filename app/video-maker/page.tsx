@@ -11,11 +11,10 @@ import {
 import type { CornerPhoto, StepKey, StepState } from './types';
 
 const SPEAKERS = [
-  { id: 'nara', label: '나라 (밝은 여성)' },
-  { id: 'nminyoung', label: '민영 (차분한 여성)' },
-  { id: 'nyoungil', label: '영일 (밝은 남성)' },
-  { id: 'ngaram', label: '가람 (밝은 청년)' },
-  { id: 'ndain', label: '다인 (어린이 여)' },
+  { id: 'ko-KR-Wavenet-A', label: 'WaveNet A (여성)' },
+  { id: 'ko-KR-Wavenet-B', label: 'WaveNet B (여성)' },
+  { id: 'ko-KR-Wavenet-C', label: 'WaveNet C (남성)' },
+  { id: 'ko-KR-Wavenet-D', label: 'WaveNet D (남성)' },
 ];
 
 const INITIAL_STEPS: StepState[] = [
@@ -43,8 +42,9 @@ export default function VideoMakerPage() {
   const [scriptLoading, setScriptLoading] = useState(false);
 
   // voice
-  const [speaker, setSpeaker] = useState('nara');
-  const [speed, setSpeed] = useState(0);
+  const [speaker, setSpeaker] = useState('ko-KR-Wavenet-A');
+  const [speakingRate, setSpeakingRate] = useState(1.0);
+  const [pitch, setPitch] = useState(0);
   const [voiceLoading, setVoiceLoading] = useState(false);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [audioDuration, setAudioDuration] = useState(0);
@@ -166,7 +166,12 @@ export default function VideoMakerPage() {
       const res = await fetch('/api/generate-voice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: script, speaker, speed }),
+        body: JSON.stringify({
+          text: script,
+          voiceName: speaker,
+          speakingRate,
+          pitch,
+        }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -351,7 +356,7 @@ export default function VideoMakerPage() {
           <div>
             <h2 className="text-lg font-semibold">3. AI 음성 생성</h2>
             <p className="text-sm text-gray-500">
-              네이버 CLOVA Voice로 한국어 나레이션 MP3를 만듭니다.
+              Google Cloud TTS (ko-KR WaveNet)로 한국어 나레이션 MP3를 만듭니다.
             </p>
           </div>
           <button
@@ -379,14 +384,26 @@ export default function VideoMakerPage() {
             </select>
           </div>
           <div>
-            <label className="label">속도 ({speed})</label>
+            <label className="label">속도 ({speakingRate.toFixed(2)}x)</label>
             <input
               type="range"
-              min={-5}
-              max={5}
+              min={0.5}
+              max={1.5}
+              step={0.05}
+              value={speakingRate}
+              onChange={(e) => setSpeakingRate(Number(e.target.value))}
+              className="w-full"
+            />
+          </div>
+          <div>
+            <label className="label">피치 ({pitch})</label>
+            <input
+              type="range"
+              min={-10}
+              max={10}
               step={1}
-              value={speed}
-              onChange={(e) => setSpeed(Number(e.target.value))}
+              value={pitch}
+              onChange={(e) => setPitch(Number(e.target.value))}
               className="w-full"
             />
           </div>
