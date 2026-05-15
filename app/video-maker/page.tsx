@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { encodeImageForClaude } from './encodeImage';
+import { parseScriptSegments } from './parseSegments';
 import { PhotoUploader } from './PhotoUploader';
 import { StepIndicator } from './StepIndicator';
 import {
@@ -43,7 +44,12 @@ export default function VideoMakerPage() {
   const [scriptLoading, setScriptLoading] = useState(false);
 
   // voice
+  const [voiceMode, setVoiceMode] = useState<'single' | 'multi'>('single');
   const [speaker, setSpeaker] = useState('ko-KR-Wavenet-A');
+  const [multiVoices, setMultiVoices] = useState<Record<string, string>>({
+    A: 'ko-KR-Wavenet-A',
+    B: 'ko-KR-Wavenet-C',
+  });
   const [speakingRate, setSpeakingRate] = useState(1.0);
   const [pitch, setPitch] = useState(0);
   const [voiceLoading, setVoiceLoading] = useState(false);
@@ -193,6 +199,8 @@ export default function VideoMakerPage() {
         }),
       );
       setStep('script', { status: 'active', detail: 'Claude가 이미지 분석 중…' });
+      const speakerTags =
+        voiceMode === 'multi' ? Object.keys(multiVoices) : undefined;
       const res = await fetch('/api/generate-script', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -200,6 +208,7 @@ export default function VideoMakerPage() {
           storeName,
           durationSeconds: duration,
           corners: encoded,
+          speakerTags,
         }),
       });
       const data = await res.json();
@@ -225,12 +234,15 @@ export default function VideoMakerPage() {
     setAudioDuration(0);
     setStep('voice', { status: 'active', detail: 'CLOVA Voice 합성 중…' });
     try {
+      const segments =
+        voiceMode === 'multi'
+          ? parseScriptSegments(script, multiVoices, speaker)
+          : [{ text: script, voiceName: speaker }];
       const res = await fetch('/api/generate-voice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          text: script,
-          voiceName: speaker,
+          segments,
           speakingRate,
           pitch,
         }),
@@ -423,55 +435,173 @@ export default function VideoMakerPage() {
               Google Cloud TTS (ko-KR WaveNet)로 한국어 나레이션 MP3를 만듭니다.
             </p>
           </div>
-          <button
-            type="button"
-            className="btn-primary"
-            disabled={!script.trim() || voiceLoading}
-            onClick={handleGenerateVoice}
-          >
-            {voiceLoading ? '합성 중…' : audioBlob ? '다시 생성' : '음성 생성'}
-          </button>
-        </div>
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          <div>
-            <label className="label">보이스</label>
-            <select
-              className="input"
-              value={speaker}
-              onChange={(e) => setSpeaker(e.target.value)}
+          <div className="flex items-center gap-2">
+            <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1 text-xs">
+              <button
+                type="button"
+                className={`rounded-md px-3 py-1.5 font-medium ${voiceMode === 'single' ? 'bg-white shadow text-gray-900' : 'text-gray-500'}`}
+                onClick={() => setVoiceMode('single')}
+              >
+                🎙 단일
+              </button>
+              <button
+                type="button"
+                className={`rounded-md px-3 py-1.5 font-medium ${voiceMode === 'multi' ? 'bg-white shadow text-gray-900' : 'text-gray-500'}`}
+                onClick={() => setVoiceMode('multi')}
+              >
+                👥 다중
+              </button>
+            </div>
+            <button
+              type="button"
+              className="btn-primary"
+              disabled={!script.trim() || voiceLoading}
+              onClick={handleGenerateVoice}
             >
-              {SPEAKERS.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="label">속도 ({speakingRate.toFixed(2)}x)</label>
-            <input
-              type="range"
-              min={0.5}
-              max={1.5}
-              step={0.05}
-              value={speakingRate}
-              onChange={(e) => setSpeakingRate(Number(e.target.value))}
-              className="w-full"
-            />
-          </div>
-          <div>
-            <label className="label">피치 ({pitch})</label>
-            <input
-              type="range"
-              min={-10}
-              max={10}
-              step={1}
-              value={pitch}
-              onChange={(e) => setPitch(Number(e.target.value))}
-              className="w-full"
-            />
+              {voiceLoading ? '합성 중…' : audioBlob ? '다시 생성' : '음성 생성'}
+            </button>
           </div>
         </div>
+
+        {voiceMode === 'single' ? (
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <div>
+              <label className="label">보이스</label>
+              <select
+                className="input"
+                value={speaker}
+                onChange={(e) => setSpeaker(e.target.value)}
+              >
+                {SPEAKERS.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="label">속도 ({speakingRate.toFixed(2)}x)</label>
+              <input
+                type="range"
+                min={0.5}
+                max={1.5}
+                step={0.05}
+                value={speakingRate}
+                onChange={(e) => setSpeakingRate(Number(e.target.value))}
+                className="w-full"
+              />
+            </div>
+            <div>
+              <label className="label">피치 ({pitch})</label>
+              <input
+                type="range"
+                min={-10}
+                max={10}
+                step={1}
+                value={pitch}
+                onChange={(e) => setPitch(Number(e.target.value))}
+                className="w-full"
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="rounded-lg bg-amber-50 p-3 text-xs text-amber-800">
+              💡 다중 보이스 모드: 스크립트에{' '}
+              <code className="rounded bg-white px-1">[A]</code>{' '}
+              <code className="rounded bg-white px-1">[B]</code> 같은 태그를 넣으면
+              해당 화자 보이스로 읽힙니다. 스크립트를 새로 생성하면 Claude가
+              자동으로 화자를 분배해 줘요.
+            </div>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+              {Object.keys(multiVoices).map((tag) => (
+                <div key={tag}>
+                  <label className="label">
+                    화자 [{tag}]
+                  </label>
+                  <select
+                    className="input"
+                    value={multiVoices[tag]}
+                    onChange={(e) =>
+                      setMultiVoices((v) => ({ ...v, [tag]: e.target.value }))
+                    }
+                  >
+                    {SPEAKERS.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ))}
+              <div className="flex items-end gap-2">
+                {Object.keys(multiVoices).length < 4 ? (
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => {
+                      const used = new Set(Object.keys(multiVoices));
+                      const next = ['A', 'B', 'C', 'D'].find((t) => !used.has(t));
+                      if (next) {
+                        setMultiVoices((v) => ({
+                          ...v,
+                          [next]: 'ko-KR-Wavenet-B',
+                        }));
+                      }
+                    }}
+                  >
+                    + 화자 추가
+                  </button>
+                ) : null}
+                {Object.keys(multiVoices).length > 2 ? (
+                  <button
+                    type="button"
+                    className="btn-secondary text-red-600"
+                    onClick={() => {
+                      const keys = Object.keys(multiVoices);
+                      const last = keys[keys.length - 1];
+                      setMultiVoices((v) => {
+                        const cp = { ...v };
+                        delete cp[last];
+                        return cp;
+                      });
+                    }}
+                  >
+                    − 마지막 제거
+                  </button>
+                ) : null}
+              </div>
+            </div>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <div>
+                <label className="label">
+                  공통 속도 ({speakingRate.toFixed(2)}x)
+                </label>
+                <input
+                  type="range"
+                  min={0.5}
+                  max={1.5}
+                  step={0.05}
+                  value={speakingRate}
+                  onChange={(e) => setSpeakingRate(Number(e.target.value))}
+                  className="w-full"
+                />
+              </div>
+              <div>
+                <label className="label">공통 피치 ({pitch})</label>
+                <input
+                  type="range"
+                  min={-10}
+                  max={10}
+                  step={1}
+                  value={pitch}
+                  onChange={(e) => setPitch(Number(e.target.value))}
+                  className="w-full"
+                />
+              </div>
+            </div>
+          </div>
+        )}
         {audioUrl ? (
           <audio className="mt-4 w-full" controls src={audioUrl} />
         ) : null}

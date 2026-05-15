@@ -16,6 +16,7 @@ type RequestBody = {
   corners: CornerInput[];
   storeName?: string;
   durationSeconds?: number;
+  speakerTags?: string[]; // ['A','B'] 같이 주면 다중 화자로 작성
 };
 
 const ALLOWED_MEDIA: ReadonlySet<MediaType> = new Set([
@@ -58,6 +59,10 @@ export async function POST(req: Request) {
   const duration = body.durationSeconds ?? 30;
   const storeName = body.storeName?.trim() || '저희 마트';
   const perCornerSeconds = Math.max(3, Math.floor(duration / corners.length));
+  const speakerTags = (body.speakerTags ?? [])
+    .map((t) => t.trim().toUpperCase())
+    .filter((t) => /^[A-D]$/.test(t));
+  const isMultiSpeaker = speakerTags.length >= 2;
 
   const userBlocks: Array<Anthropic.TextBlockParam | Anthropic.ImageBlockParam> = [];
 
@@ -93,6 +98,12 @@ export async function POST(req: Request) {
     }
   }
 
+  const multiSpeakerRule = isMultiSpeaker
+    ? `\n- 다중 화자 모드: 화자 ${speakerTags.join(', ')} 가 번갈아 말합니다.\n` +
+      `  각 발화 앞에 반드시 [${speakerTags[0]}], [${speakerTags[1]}] 같은 태그를 붙이세요. 예: "[A] 안녕하세요 [B] 오늘은 특가의 날!".\n` +
+      `  자연스럽게 핑퐁(질문/대답, 소개/반응) 형태로 구성하되, 한 화자가 너무 길게 독점하지 않게 분배하세요.`
+    : '';
+
   userBlocks.push({
     type: 'text',
     text:
@@ -101,7 +112,8 @@ export async function POST(req: Request) {
       `- 친근하고 활기찬 구어체, 과장된 감탄사는 자제\n` +
       `- 한 문장 25자 내외, 전체 ${duration * 5}~${duration * 6}자\n` +
       `- 가격/특가 표현은 사진이나 힌트에 명확히 보일 때만 인용 (없는 가격을 지어내지 말 것)\n` +
-      `- 결과는 나레이션 본문만 평문으로 출력 (제목/머리말/마크다운/따옴표 금지)`,
+      `- 결과는 나레이션 본문만 평문으로 출력 (제목/머리말/마크다운/따옴표 금지)` +
+      multiSpeakerRule,
   });
 
   const client = new Anthropic({ apiKey });
