@@ -26,7 +26,8 @@ export function PhotoUploader({
         <div>
           <h2 className="text-lg font-semibold">1. 사진 업로드 & 코너 설명</h2>
           <p className="text-sm text-gray-500">
-            여러 장을 한 번에 추가하고, 각 사진의 코너명/설명을 입력하세요.
+            여러 장을 한 번에 추가하세요. Claude가 사진을 직접 분석하므로
+            코너명/설명은 비워도 되고, 강조하고 싶은 내용만 힌트로 적어도 됩니다.
           </p>
         </div>
         <button
@@ -97,22 +98,22 @@ export function PhotoUploader({
                     </div>
                   </div>
                   <div>
-                    <label className="label">코너명</label>
+                    <label className="label">코너명 (선택)</label>
                     <input
                       className="input"
                       value={p.cornerName}
-                      placeholder="예: 신선과일 코너"
+                      placeholder="비우면 Claude가 사진에서 추정"
                       onChange={(e) =>
                         onUpdate(p.id, { cornerName: e.target.value })
                       }
                     />
                   </div>
                   <div>
-                    <label className="label">설명</label>
+                    <label className="label">힌트 (선택)</label>
                     <textarea
                       className="input min-h-[64px]"
                       value={p.description}
-                      placeholder="예: 햇사과 1.5kg 9,900원 특가, 산지직송"
+                      placeholder="강조하고 싶은 가격/문구가 있으면 입력 (예: 1.5kg 9,900원 특가)"
                       onChange={(e) =>
                         onUpdate(p.id, { description: e.target.value })
                       }

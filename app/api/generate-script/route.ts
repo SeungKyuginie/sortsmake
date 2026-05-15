@@ -3,9 +3,13 @@ import { NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
 
+type MediaType = 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif';
+
 type CornerInput = {
-  name: string;
-  description: string;
+  name?: string;
+  description?: string;
+  imageBase64?: string;
+  mediaType?: MediaType;
 };
 
 type RequestBody = {
@@ -13,6 +17,15 @@ type RequestBody = {
   storeName?: string;
   durationSeconds?: number;
 };
+
+const ALLOWED_MEDIA: ReadonlySet<MediaType> = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+]);
+
+export const maxDuration = 60;
 
 export async function POST(req: Request) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -31,39 +44,65 @@ export async function POST(req: Request) {
   }
 
   const corners = (body.corners ?? []).filter(
-    (c) => c && (c.name?.trim() || c.description?.trim()),
+    (c) =>
+      c &&
+      (c.imageBase64?.length || c.name?.trim() || c.description?.trim()),
   );
   if (corners.length === 0) {
     return NextResponse.json(
-      { error: '최소 1개의 코너 정보가 필요합니다.' },
+      { error: '최소 1개의 코너 정보(사진 또는 텍스트)가 필요합니다.' },
       { status: 400 },
     );
   }
 
   const duration = body.durationSeconds ?? 30;
   const storeName = body.storeName?.trim() || '저희 마트';
-
-  const cornerLines = corners
-    .map((c, i) => `${i + 1}. ${c.name || '(이름 없음)'} - ${c.description || ''}`)
-    .join('\n');
-
   const perCornerSeconds = Math.max(3, Math.floor(duration / corners.length));
 
-  const userPrompt = `당신은 마트 홍보 유튜브 숏츠 전문 카피라이터입니다.
-아래 코너 정보로 ${duration}초짜리 한국어 나레이션 스크립트를 만들어 주세요.
+  const userBlocks: Array<Anthropic.TextBlockParam | Anthropic.ImageBlockParam> = [];
 
-[마트명] ${storeName}
-[코너 목록]
-${cornerLines}
+  userBlocks.push({
+    type: 'text',
+    text:
+      `${duration}초 분량의 한국어 마트 홍보 숏츠 나레이션을 작성해 주세요.\n\n` +
+      `[마트명] ${storeName}\n` +
+      `[코너 수] ${corners.length}개 (코너당 약 ${perCornerSeconds}초)\n` +
+      `[전체 길이 가이드] 약 ${duration * 5}~${duration * 6}자\n\n` +
+      `아래에 코너별로 사진과 (있다면) 텍스트 힌트를 순서대로 제공합니다.\n` +
+      `각 사진을 시각적으로 직접 분석해 어떤 상품이 보이는지, 가격표나 POP가 있으면 어떤 내용인지, 분위기가 어떤지 파악해서 자연스럽게 반영하세요. 텍스트 힌트가 있으면 우선합니다.`,
+  });
 
-요구사항:
-- 전체 길이는 ${duration}초 분량(읽기 속도 기준 약 ${duration * 5}~${duration * 6}자)
-- 코너 ${corners.length}개를 모두 다루되 각 코너당 약 ${perCornerSeconds}초
-- 도입(2~3초) → 코너별 소개 → 마무리 콜투액션(2~3초) 구조
-- 친근하고 활기찬 구어체, 과장된 감탄사는 자제
-- 가격/특가 표현은 입력된 설명에 있을 때만 사용
-- 문장은 짧고 명료하게, 한 문장은 25자 내외
-- 결과는 나레이션 본문만 출력 (제목/머리말/마크다운/따옴표 없이 평문)`;
+  for (let i = 0; i < corners.length; i++) {
+    const c = corners[i];
+    const hint =
+      [c.name?.trim(), c.description?.trim()].filter(Boolean).join(' / ') ||
+      '(텍스트 힌트 없음)';
+    userBlocks.push({
+      type: 'text',
+      text: `[코너 ${i + 1}] 힌트: ${hint}`,
+    });
+    if (c.imageBase64 && c.mediaType && ALLOWED_MEDIA.has(c.mediaType)) {
+      userBlocks.push({
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: c.mediaType,
+          data: c.imageBase64,
+        },
+      });
+    }
+  }
+
+  userBlocks.push({
+    type: 'text',
+    text:
+      `규칙:\n` +
+      `- 도입(2~3초) → 코너별 소개 → 마무리 콜투액션(2~3초) 구조\n` +
+      `- 친근하고 활기찬 구어체, 과장된 감탄사는 자제\n` +
+      `- 한 문장 25자 내외, 전체 ${duration * 5}~${duration * 6}자\n` +
+      `- 가격/특가 표현은 사진이나 힌트에 명확히 보일 때만 인용 (없는 가격을 지어내지 말 것)\n` +
+      `- 결과는 나레이션 본문만 평문으로 출력 (제목/머리말/마크다운/따옴표 금지)`,
+  });
 
   const client = new Anthropic({ apiKey });
 
@@ -72,8 +111,8 @@ ${cornerLines}
       model: 'claude-sonnet-4-20250514',
       max_tokens: 1024,
       system:
-        '당신은 짧고 임팩트 있는 한국어 광고 카피를 잘 쓰는 베테랑 마트 홍보 작가입니다. 항상 평문으로만, 부가 설명 없이 나레이션만 출력합니다.',
-      messages: [{ role: 'user', content: userPrompt }],
+        '당신은 마트 홍보 영상 카피를 전문으로 쓰는 한국어 작가이자, 사진 속 상품/가격/분위기를 정확히 읽어내는 비주얼 분석가입니다. 결과는 항상 평문 나레이션만, 부가 설명 없이 출력합니다.',
+      messages: [{ role: 'user', content: userBlocks }],
     });
 
     const text = message.content

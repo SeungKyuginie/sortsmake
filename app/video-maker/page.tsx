@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { encodeImageForClaude } from './encodeImage';
 import { PhotoUploader } from './PhotoUploader';
 import { StepIndicator } from './StepIndicator';
 import {
@@ -126,18 +127,27 @@ export default function VideoMakerPage() {
   const handleGenerateScript = async () => {
     setError(null);
     setScriptLoading(true);
-    setStep('script', { status: 'active', detail: 'Claude로 생성 중…' });
+    setStep('script', { status: 'active', detail: '이미지 분석 준비 중…' });
     try {
+      const encoded = await Promise.all(
+        photos.map(async (p) => {
+          const { base64, mediaType } = await encodeImageForClaude(p.file);
+          return {
+            name: p.cornerName,
+            description: p.description,
+            imageBase64: base64,
+            mediaType,
+          };
+        }),
+      );
+      setStep('script', { status: 'active', detail: 'Claude가 이미지 분석 중…' });
       const res = await fetch('/api/generate-script', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           storeName,
           durationSeconds: duration,
-          corners: photos.map((p) => ({
-            name: p.cornerName,
-            description: p.description,
-          })),
+          corners: encoded,
         }),
       });
       const data = await res.json();
