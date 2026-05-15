@@ -104,6 +104,14 @@ export async function POST(req: Request) {
       `  자연스럽게 핑퐁(질문/대답, 소개/반응) 형태로 구성하되, 한 화자가 너무 길게 독점하지 않게 분배하세요.`
     : '';
 
+  const cornerMarkerRule =
+    corners.length > 1
+      ? `\n- 코너 동기화 마커: 각 코너 설명을 시작할 때 반드시 [#1], [#2], ... [#${corners.length}] 마커를 그 위치에 정확히 한 번씩 모두 사용하세요.\n` +
+        `  예: "여러분 안녕하세요! [#1] 신선한 사과가 도착했어요. [#2] 정육 코너에서는 한우 30% 할인. [#3] 지금 장보러 오세요!"\n` +
+        `  도입(인사)은 [#1] 앞에 두고, 마무리 콜투액션은 [#${corners.length}] 뒤에 두세요.\n` +
+        `  코너별 분량은 비슷하게 맞추되, 강조할 코너가 명확하면 약간 차이는 둘 수 있습니다. 단, 너무 짧지(2초 미만)도 너무 길지(10초 초과)도 않게.`
+      : '';
+
   userBlocks.push({
     type: 'text',
     text:
@@ -113,7 +121,8 @@ export async function POST(req: Request) {
       `- 한 문장 25자 내외, 전체 ${duration * 5}~${duration * 6}자\n` +
       `- 가격/특가 표현은 사진이나 힌트에 명확히 보일 때만 인용 (없는 가격을 지어내지 말 것)\n` +
       `- 결과는 나레이션 본문만 평문으로 출력 (제목/머리말/마크다운/따옴표 금지)` +
-      multiSpeakerRule,
+      multiSpeakerRule +
+      cornerMarkerRule,
   });
 
   const client = new Anthropic({ apiKey });

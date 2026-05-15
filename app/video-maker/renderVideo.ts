@@ -19,6 +19,9 @@ export type RenderInput = {
   captions: string[]; // per-item caption (optional, may be empty strings)
   audio: Blob;
   audioDurationSec: number;
+  // 코너별 음성 길이(초). 항목 수와 맞아야 하고, 합 == audioDurationSec.
+  // 미지정 시 audio 길이를 항목 수로 균등 분할.
+  perItemDurations?: number[];
   bgm?: Blob | null;
   bgmVolume?: number; // 0..1, default 0.18
   voiceVolume?: number; // 0..1, default 1
@@ -60,25 +63,23 @@ function sanitizeCaption(text: string): string {
 
 function buildFilterGraph(
   items: RenderItem[],
-  perItemDuration: number,
+  itemDurations: number[],
   captions: string[],
 ): string {
-  // Each input is normalized to a perItemDuration video segment of 1080x1920@30fps,
-  // padded with the last frame if the source is shorter, then concatenated with xfade.
   const segments: string[] = [];
   for (let i = 0; i < items.length; i++) {
+    const T = itemDurations[i];
     const caption = sanitizeCaption(captions[i] ?? '');
     const isVideo = items[i].kind === 'video';
-    // scale to cover, pad to canvas, normalize sar/fps/pixel format
     const base =
       `[${i}:v]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=decrease,` +
       `pad=${WIDTH}:${HEIGHT}:(ow-iw)/2:(oh-ih)/2:color=black,` +
       `setsar=1,fps=${FPS},format=yuv420p`;
-    // For videos: ensure exactly perItemDuration by padding the tail with the last frame
-    // then trimming to length. Images are already looped via -loop 1 -t T input flag.
+    // Videos: ensure exactly T seconds (pad last frame, trim). Images are looped
+    // via -loop 1 -t T input flag, so they already produce T-second streams.
     const lengthFix = isVideo
-      ? `,tpad=stop_mode=clone:stop_duration=${perItemDuration},` +
-        `trim=duration=${perItemDuration},setpts=PTS-STARTPTS`
+      ? `,tpad=stop_mode=clone:stop_duration=${T.toFixed(3)},` +
+        `trim=duration=${T.toFixed(3)},setpts=PTS-STARTPTS`
       : '';
     const withText = caption
       ? `${base}${lengthFix},drawtext=text='${caption}':fontcolor=white:fontsize=64:` +
@@ -89,19 +90,24 @@ function buildFilterGraph(
   }
 
   if (items.length === 1) {
-    segments.push(`[v0]trim=duration=${perItemDuration},setpts=PTS-STARTPTS[vout]`);
+    segments.push(
+      `[v0]trim=duration=${itemDurations[0].toFixed(3)},setpts=PTS-STARTPTS[vout]`,
+    );
     return segments.join(';');
   }
 
-  // Chain xfade transitions
+  // Cumulative xfade with per-item durations.
+  // After each xfade, combined length = prev_cum + T_i - FADE.
   let prev = 'v0';
+  let cum = itemDurations[0];
   for (let i = 1; i < items.length; i++) {
-    const offset = perItemDuration * i - FADE_DURATION;
+    const offset = cum - FADE_DURATION;
     const out = i === items.length - 1 ? 'vout' : `vx${i}`;
     segments.push(
       `[${prev}][v${i}]xfade=transition=fade:duration=${FADE_DURATION}:offset=${offset.toFixed(3)}[${out}]`,
     );
     prev = out;
+    cum += itemDurations[i] - FADE_DURATION;
   }
 
   return segments.join(';');
@@ -116,6 +122,7 @@ export async function renderVideo(
     captions,
     audio,
     audioDurationSec,
+    perItemDurations,
     bgm,
     bgmVolume = 0.18,
     voiceVolume = 1.0,
@@ -127,10 +134,24 @@ export async function renderVideo(
   onProgress({ ratio: 0.02, message: 'FFmpeg 초기화 중…' });
   const ffmpeg = await getFFmpeg();
 
-  // total duration matches audio; each item gets equal share
-  const totalDuration = audioDurationSec;
-  const perItemDuration = totalDuration / items.length;
-  if (perItemDuration <= FADE_DURATION + 0.1 && items.length > 1) {
+  // 코너별 길이 결정.
+  // - perItemDurations가 주어지면 그 값을 사용 (sync 모드).
+  // - 합이 audioDurationSec과 다르면, 합의 비율을 보존해 audioDurationSec에 정규화.
+  // - 마지막 클립을 (N-1)*FADE_DURATION 만큼 늘려, xfade로 손실되는 시간만큼 보정.
+  let itemDurations: number[];
+  if (perItemDurations && perItemDurations.length === items.length) {
+    const sum = perItemDurations.reduce((a, b) => a + b, 0);
+    const scale = sum > 0 ? audioDurationSec / sum : 1;
+    itemDurations = perItemDurations.map((d) => Math.max(0.5, d * scale));
+  } else {
+    const per = audioDurationSec / items.length;
+    itemDurations = Array(items.length).fill(per);
+  }
+  if (items.length > 1) {
+    itemDurations[items.length - 1] += (items.length - 1) * FADE_DURATION;
+  }
+  const minPer = Math.min(...itemDurations);
+  if (minPer <= FADE_DURATION + 0.1 && items.length > 1) {
     onProgress({
       ratio: 0.03,
       message: '경고: 미디어당 시간이 매우 짧습니다.',
@@ -167,7 +188,7 @@ export async function renderVideo(
   }
 
   onProgress({ ratio: 0.18, message: '필터 그래프 구성 중…' });
-  const videoFilter = buildFilterGraph(items, perItemDuration, captions);
+  const videoFilter = buildFilterGraph(items, itemDurations, captions);
 
   const voiceIdx = items.length;
   const bgmIdx = items.length + 1;
@@ -183,7 +204,14 @@ export async function renderVideo(
   const args: string[] = [];
   for (let i = 0; i < items.length; i++) {
     if (items[i].kind === 'image') {
-      args.push('-loop', '1', '-t', String(perItemDuration), '-i', inputNames[i]);
+      args.push(
+        '-loop',
+        '1',
+        '-t',
+        itemDurations[i].toFixed(3),
+        '-i',
+        inputNames[i],
+      );
     } else {
       // Video: let the filter graph (tpad+trim) handle length, no -t needed.
       args.push('-i', inputNames[i]);

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { encodeImageForClaude, encodeVideoFirstFrame } from './encodeImage';
-import { parseScriptSegments } from './parseSegments';
+import { parseCornerSegments, parseScriptSegments } from './parseSegments';
 import { PhotoUploader } from './PhotoUploader';
 import { StepIndicator } from './StepIndicator';
 import {
@@ -233,38 +233,57 @@ export default function VideoMakerPage() {
     }
   };
 
-  // step 3: voice
+  // step 3: voice — 코너별로 따로 합성해 음성 길이를 측정한 뒤 하나로 합칩니다.
+  const [cornerDurations, setCornerDurations] = useState<number[]>([]);
+
   const handleGenerateVoice = async () => {
     setError(null);
     setVoiceLoading(true);
     setAudioBlob(null);
     setAudioDuration(0);
-    setStep('voice', { status: 'active', detail: 'CLOVA Voice 합성 중…' });
+    setCornerDurations([]);
+    setStep('voice', { status: 'active', detail: '코너별 음성 합성 중…' });
     try {
-      const segments =
-        voiceMode === 'multi'
-          ? parseScriptSegments(script, multiVoices, speaker)
-          : [{ text: script, voiceName: speaker }];
-      const res = await fetch('/api/generate-voice', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          segments,
-          speakingRate,
-          pitch,
-        }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || '음성 생성 실패');
+      const cornerCount = photos.length || 1;
+      const cornerTexts = parseCornerSegments(script, cornerCount);
+
+      const cornerBlobs: Blob[] = [];
+      const cornerDurs: number[] = [];
+
+      for (let i = 0; i < cornerTexts.length; i++) {
+        setStep('voice', {
+          status: 'active',
+          detail: `코너 ${i + 1}/${cornerTexts.length} 합성 중…`,
+        });
+        const text = cornerTexts[i];
+        const segments =
+          voiceMode === 'multi'
+            ? parseScriptSegments(text, multiVoices, speaker)
+            : [{ text, voiceName: speaker }];
+
+        const res = await fetch('/api/generate-voice', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ segments, speakingRate, pitch }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || `코너 ${i + 1} 음성 생성 실패`);
+        }
+        const blob = await res.blob();
+        const dur = await probeAudioDuration(blob);
+        cornerBlobs.push(blob);
+        cornerDurs.push(dur);
       }
-      const blob = await res.blob();
-      const dur = await probeAudioDuration(blob);
-      setAudioBlob(blob);
-      setAudioDuration(dur);
+
+      const combined = new Blob(cornerBlobs, { type: 'audio/mpeg' });
+      const totalDur = cornerDurs.reduce((a, b) => a + b, 0);
+      setAudioBlob(combined);
+      setAudioDuration(totalDur);
+      setCornerDurations(cornerDurs);
       setStep('voice', {
         status: 'complete',
-        detail: `${dur.toFixed(1)}초`,
+        detail: `${totalDur.toFixed(1)}초 · 코너 ${cornerDurs.length}개`,
       });
       setStep('render', { status: 'active' });
     } catch (e) {
@@ -295,6 +314,10 @@ export default function VideoMakerPage() {
           ),
           audio: audioBlob,
           audioDurationSec: audioDuration,
+          perItemDurations:
+            cornerDurations.length === photos.length
+              ? cornerDurations
+              : undefined,
           bgm: bgmFile,
           bgmVolume,
         },
