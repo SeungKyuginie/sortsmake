@@ -15,6 +15,7 @@
 ```bash
 cp .env.local.example .env.local
 # .env.local 에 ANTHROPIC_API_KEY / GOOGLE_TTS_API_KEY 입력
+# (선택) ELEVENLABS_API_KEY — BGM AI 자동 생성 사용 시
 
 npm install
 npm run dev

@@ -60,8 +60,13 @@ export default function VideoMakerPage() {
   }, [audioUrl]);
 
   // bgm
+  const [bgmMode, setBgmMode] = useState<'upload' | 'ai'>('upload');
   const [bgmFile, setBgmFile] = useState<File | null>(null);
   const [bgmVolume, setBgmVolume] = useState(0.18);
+  const [bgmPrompt, setBgmPrompt] = useState(
+    'Upbeat, cheerful Korean retail store background music. Light percussion, bright marimba, friendly and energetic. Instrumental only. Suitable for a 30-second mart promotional shorts video.',
+  );
+  const [bgmGenLoading, setBgmGenLoading] = useState(false);
   const bgmUrl = useMemo(
     () => (bgmFile ? URL.createObjectURL(bgmFile) : null),
     [bgmFile],
@@ -71,6 +76,40 @@ export default function VideoMakerPage() {
       if (bgmUrl) URL.revokeObjectURL(bgmUrl);
     };
   }, [bgmUrl]);
+
+  const handleGenerateBgm = async () => {
+    setError(null);
+    setBgmGenLoading(true);
+    try {
+      // 음성 길이가 있으면 그에 맞춰 생성, 없으면 영상 길이 사용
+      const lengthMs = Math.round(
+        (audioDuration > 0 ? audioDuration : duration) * 1000,
+      );
+      const res = await fetch('/api/generate-music', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: bgmPrompt,
+          lengthMs,
+          forceInstrumental: true,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'BGM 생성 실패');
+      }
+      const blob = await res.blob();
+      const file = new File([blob], `ai-bgm-${Date.now()}.mp3`, {
+        type: 'audio/mpeg',
+      });
+      setBgmFile(file);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'BGM 생성 실패';
+      setError(msg);
+    } finally {
+      setBgmGenLoading(false);
+    }
+  };
 
   // render
   const [rendering, setRendering] = useState(false);
@@ -438,52 +477,106 @@ export default function VideoMakerPage() {
         ) : null}
       </section>
 
-      {/* Step 3.5: BGM */}
+      {/* Step 3-2: BGM */}
       <section className="card mb-6">
         <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold">
-              3-2. 배경음악 (선택)
-            </h2>
+            <h2 className="text-lg font-semibold">3-2. 배경음악 (선택)</h2>
             <p className="text-sm text-gray-500">
-              MP3/WAV 파일을 업로드하면 음성과 함께 믹스됩니다. 음성 길이에
-              맞춰 자동 루프되고, 시작/끝에 페이드가 들어갑니다. 저작권 무료
-              음원은{' '}
-              <a
-                href="https://pixabay.com/music/"
-                target="_blank"
-                rel="noreferrer"
-                className="text-brand-600 underline"
-              >
-                Pixabay Music
-              </a>
-              ,{' '}
-              <a
-                href="https://studio.youtube.com/channel/UC/music"
-                target="_blank"
-                rel="noreferrer"
-                className="text-brand-600 underline"
-              >
-                YouTube Audio Library
-              </a>
-              에서 받을 수 있습니다.
+              음성과 자동으로 믹스되고, 음성 길이에 맞춰 루프 + 시작/끝 페이드가 들어갑니다.
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <label className="btn-secondary cursor-pointer">
-              {bgmFile ? '음악 교체' : '음악 업로드'}
-              <input
-                type="file"
-                accept="audio/*"
-                className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0] ?? null;
-                  setBgmFile(f);
-                  e.target.value = '';
-                }}
+          <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1 text-xs">
+            <button
+              type="button"
+              className={`rounded-md px-3 py-1.5 font-medium ${bgmMode === 'upload' ? 'bg-white shadow text-gray-900' : 'text-gray-500'}`}
+              onClick={() => setBgmMode('upload')}
+            >
+              📁 업로드
+            </button>
+            <button
+              type="button"
+              className={`rounded-md px-3 py-1.5 font-medium ${bgmMode === 'ai' ? 'bg-white shadow text-gray-900' : 'text-gray-500'}`}
+              onClick={() => setBgmMode('ai')}
+            >
+              ✨ AI 생성
+            </button>
+          </div>
+        </div>
+
+        {bgmMode === 'upload' ? (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <label className="btn-secondary cursor-pointer">
+                {bgmFile ? '음악 교체' : '음악 업로드'}
+                <input
+                  type="file"
+                  accept="audio/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0] ?? null;
+                    setBgmFile(f);
+                    e.target.value = '';
+                  }}
+                />
+              </label>
+              <span className="text-xs text-gray-500">
+                저작권 무료 음원은{' '}
+                <a
+                  href="https://pixabay.com/music/"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-brand-600 underline"
+                >
+                  Pixabay Music
+                </a>
+                ,{' '}
+                <a
+                  href="https://studio.youtube.com/channel/UC/music"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-brand-600 underline"
+                >
+                  YouTube Audio Library
+                </a>
+                에서 받을 수 있어요.
+              </span>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div>
+              <label className="label">
+                음악 프롬프트 (영어로 작성하면 결과가 더 좋음)
+              </label>
+              <textarea
+                className="input min-h-[88px]"
+                value={bgmPrompt}
+                onChange={(e) => setBgmPrompt(e.target.value)}
+                placeholder="Upbeat Korean retail store BGM, light percussion, bright, instrumental..."
               />
-            </label>
-            {bgmFile ? (
+              <div className="mt-1 text-xs text-gray-500">
+                길이는 음성 길이(없으면 영상 길이)에 맞춰 자동으로 요청됩니다.
+                ElevenLabs 무료 티어는 월 약 10분 분량 음악까지 무료.
+              </div>
+            </div>
+            <button
+              type="button"
+              className="btn-primary"
+              disabled={!bgmPrompt.trim() || bgmGenLoading}
+              onClick={handleGenerateBgm}
+            >
+              {bgmGenLoading ? 'AI 음악 생성 중… (보통 20~40초)' : bgmFile ? '다시 생성' : '음악 생성하기'}
+            </button>
+          </div>
+        )}
+
+        {bgmFile ? (
+          <div className="mt-4 space-y-3 border-t border-gray-100 pt-4">
+            <div className="flex items-center justify-between gap-2 text-sm text-gray-700">
+              <span>
+                🎵 {bgmFile.name} · {(bgmFile.size / 1024 / 1024).toFixed(1)} MB
+              </span>
               <button
                 type="button"
                 className="btn-secondary text-red-600"
@@ -491,17 +584,8 @@ export default function VideoMakerPage() {
               >
                 제거
               </button>
-            ) : null}
-          </div>
-        </div>
-        {bgmFile ? (
-          <div className="space-y-3">
-            <div className="text-sm text-gray-700">
-              🎵 {bgmFile.name} · {(bgmFile.size / 1024 / 1024).toFixed(1)} MB
             </div>
-            {bgmUrl ? (
-              <audio className="w-full" controls src={bgmUrl} />
-            ) : null}
+            {bgmUrl ? <audio className="w-full" controls src={bgmUrl} /> : null}
             <div>
               <label className="label">
                 BGM 볼륨 ({Math.round(bgmVolume * 100)}% — 음성 대비)
@@ -521,7 +605,7 @@ export default function VideoMakerPage() {
             </div>
           </div>
         ) : (
-          <div className="rounded-lg border border-dashed border-gray-300 p-4 text-center text-sm text-gray-500">
+          <div className="mt-4 rounded-lg border border-dashed border-gray-300 p-4 text-center text-sm text-gray-500">
             배경음악 없이도 영상 생성은 가능합니다.
           </div>
         )}
