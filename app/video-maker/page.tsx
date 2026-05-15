@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { encodeImageForClaude } from './encodeImage';
+import { encodeImageForClaude, encodeVideoFirstFrame } from './encodeImage';
 import { parseScriptSegments } from './parseSegments';
 import { PhotoUploader } from './PhotoUploader';
 import { StepIndicator } from './StepIndicator';
@@ -156,6 +156,7 @@ export default function VideoMakerPage() {
       id: uid(),
       file: f,
       previewUrl: URL.createObjectURL(f),
+      kind: f.type.startsWith('video/') ? 'video' : 'image',
       cornerName: '',
       description: '',
     }));
@@ -192,7 +193,10 @@ export default function VideoMakerPage() {
     try {
       const encoded = await Promise.all(
         photos.map(async (p) => {
-          const { base64, mediaType } = await encodeImageForClaude(p.file);
+          const { base64, mediaType } =
+            p.kind === 'video'
+              ? await encodeVideoFirstFrame(p.file)
+              : await encodeImageForClaude(p.file);
           return {
             name: p.cornerName,
             description: p.description,
@@ -285,7 +289,7 @@ export default function VideoMakerPage() {
     try {
       const blob = await renderVideo(
         {
-          images: photos.map((p) => p.file),
+          items: photos.map((p) => ({ file: p.file, kind: p.kind })),
           captions: photos.map((p) =>
             [p.cornerName, p.description].filter(Boolean).join(' · '),
           ),

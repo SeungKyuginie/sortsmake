@@ -2,6 +2,7 @@ export type CornerPhoto = {
   id: string;
   file: File;
   previewUrl: string;
+  kind: 'image' | 'video';
   cornerName: string;
   description: string;
 };

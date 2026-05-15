@@ -9,9 +9,14 @@ const HEIGHT = 1920;
 const FPS = 30;
 const FADE_DURATION = 0.5; // seconds
 
+export type RenderItem = {
+  file: File;
+  kind: 'image' | 'video';
+};
+
 export type RenderInput = {
-  images: File[];
-  captions: string[]; // per-image caption (optional, may be empty strings)
+  items: RenderItem[];
+  captions: string[]; // per-item caption (optional, may be empty strings)
   audio: Blob;
   audioDurationSec: number;
   bgm?: Blob | null;
@@ -54,37 +59,45 @@ function sanitizeCaption(text: string): string {
 }
 
 function buildFilterGraph(
-  imageCount: number,
-  perImageDuration: number,
+  items: RenderItem[],
+  perItemDuration: number,
   captions: string[],
 ): string {
-  // Each input image is looped to its duration, scaled & padded to 1080x1920, then concatenated with xfade.
+  // Each input is normalized to a perItemDuration video segment of 1080x1920@30fps,
+  // padded with the last frame if the source is shorter, then concatenated with xfade.
   const segments: string[] = [];
-  for (let i = 0; i < imageCount; i++) {
+  for (let i = 0; i < items.length; i++) {
     const caption = sanitizeCaption(captions[i] ?? '');
-    // scale to cover, then pad to canvas, set sar, set fps, then drawtext
+    const isVideo = items[i].kind === 'video';
+    // scale to cover, pad to canvas, normalize sar/fps/pixel format
     const base =
       `[${i}:v]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=decrease,` +
       `pad=${WIDTH}:${HEIGHT}:(ow-iw)/2:(oh-ih)/2:color=black,` +
       `setsar=1,fps=${FPS},format=yuv420p`;
+    // For videos: ensure exactly perItemDuration by padding the tail with the last frame
+    // then trimming to length. Images are already looped via -loop 1 -t T input flag.
+    const lengthFix = isVideo
+      ? `,tpad=stop_mode=clone:stop_duration=${perItemDuration},` +
+        `trim=duration=${perItemDuration},setpts=PTS-STARTPTS`
+      : '';
     const withText = caption
-      ? `${base},drawtext=text='${caption}':fontcolor=white:fontsize=64:` +
+      ? `${base}${lengthFix},drawtext=text='${caption}':fontcolor=white:fontsize=64:` +
         `box=1:boxcolor=black@0.55:boxborderw=24:` +
         `x=(w-text_w)/2:y=h-380`
-      : base;
+      : `${base}${lengthFix}`;
     segments.push(`${withText}[v${i}]`);
   }
 
-  if (imageCount === 1) {
-    segments.push(`[v0]trim=duration=${perImageDuration},setpts=PTS-STARTPTS[vout]`);
+  if (items.length === 1) {
+    segments.push(`[v0]trim=duration=${perItemDuration},setpts=PTS-STARTPTS[vout]`);
     return segments.join(';');
   }
 
   // Chain xfade transitions
   let prev = 'v0';
-  for (let i = 1; i < imageCount; i++) {
-    const offset = perImageDuration * i - FADE_DURATION;
-    const out = i === imageCount - 1 ? 'vout' : `vx${i}`;
+  for (let i = 1; i < items.length; i++) {
+    const offset = perItemDuration * i - FADE_DURATION;
+    const out = i === items.length - 1 ? 'vout' : `vx${i}`;
     segments.push(
       `[${prev}][v${i}]xfade=transition=fade:duration=${FADE_DURATION}:offset=${offset.toFixed(3)}[${out}]`,
     );
@@ -99,7 +112,7 @@ export async function renderVideo(
   onProgress: (p: RenderProgress) => void,
 ): Promise<Blob> {
   const {
-    images,
+    items,
     captions,
     audio,
     audioDurationSec,
@@ -107,21 +120,20 @@ export async function renderVideo(
     bgmVolume = 0.18,
     voiceVolume = 1.0,
   } = input;
-  if (images.length === 0) throw new Error('이미지가 없습니다.');
+  if (items.length === 0) throw new Error('업로드된 미디어가 없습니다.');
   if (!audioDurationSec || audioDurationSec <= 0)
     throw new Error('오디오 길이를 알 수 없습니다.');
 
   onProgress({ ratio: 0.02, message: 'FFmpeg 초기화 중…' });
   const ffmpeg = await getFFmpeg();
 
-  // total duration matches audio; each image gets equal share
+  // total duration matches audio; each item gets equal share
   const totalDuration = audioDurationSec;
-  const perImageDuration = totalDuration / images.length;
-  if (perImageDuration <= FADE_DURATION + 0.1 && images.length > 1) {
-    // very short per-image times still work but warn via message
+  const perItemDuration = totalDuration / items.length;
+  if (perItemDuration <= FADE_DURATION + 0.1 && items.length > 1) {
     onProgress({
       ratio: 0.03,
-      message: '경고: 이미지당 시간이 매우 짧습니다.',
+      message: '경고: 미디어당 시간이 매우 짧습니다.',
     });
   }
 
@@ -133,11 +145,14 @@ export async function renderVideo(
     }
   });
 
-  onProgress({ ratio: 0.06, message: '이미지 업로드 중…' });
-  // Write inputs
-  for (let i = 0; i < images.length; i++) {
-    const data = await fetchFile(images[i]);
-    await ffmpeg.writeFile(`img${i}.jpg`, data);
+  onProgress({ ratio: 0.06, message: '미디어 업로드 중…' });
+  // Write inputs. Use generic names; ffmpeg detects format from content.
+  const inputNames: string[] = [];
+  for (let i = 0; i < items.length; i++) {
+    const name = items[i].kind === 'video' ? `media${i}.mp4` : `media${i}.jpg`;
+    inputNames.push(name);
+    const data = await fetchFile(items[i].file);
+    await ffmpeg.writeFile(name, data);
   }
   const audioData = await fetchFile(audio);
   await ffmpeg.writeFile('audio.mp3', audioData);
@@ -152,14 +167,10 @@ export async function renderVideo(
   }
 
   onProgress({ ratio: 0.18, message: '필터 그래프 구성 중…' });
-  const videoFilter = buildFilterGraph(
-    images.length,
-    perImageDuration,
-    captions,
-  );
+  const videoFilter = buildFilterGraph(items, perItemDuration, captions);
 
-  const voiceIdx = images.length;
-  const bgmIdx = images.length + 1;
+  const voiceIdx = items.length;
+  const bgmIdx = items.length + 1;
   const audioMixFilter = bgmFile
     ? `;[${voiceIdx}:a]volume=${voiceVolume}[vc];` +
       `[${bgmIdx}:a]aloop=loop=-1:size=2e9,volume=${bgmVolume},` +
@@ -170,8 +181,13 @@ export async function renderVideo(
   const audioMap = bgmFile ? '[aout]' : `${voiceIdx}:a`;
 
   const args: string[] = [];
-  for (let i = 0; i < images.length; i++) {
-    args.push('-loop', '1', '-t', String(perImageDuration), '-i', `img${i}.jpg`);
+  for (let i = 0; i < items.length; i++) {
+    if (items[i].kind === 'image') {
+      args.push('-loop', '1', '-t', String(perItemDuration), '-i', inputNames[i]);
+    } else {
+      // Video: let the filter graph (tpad+trim) handle length, no -t needed.
+      args.push('-i', inputNames[i]);
+    }
   }
   args.push('-i', 'audio.mp3');
   if (bgmFile) args.push('-i', bgmFile);
@@ -210,8 +226,8 @@ export async function renderVideo(
 
   // cleanup
   try {
-    for (let i = 0; i < images.length; i++) {
-      await ffmpeg.deleteFile(`img${i}.jpg`);
+    for (const name of inputNames) {
+      await ffmpeg.deleteFile(name);
     }
     await ffmpeg.deleteFile('audio.mp3');
     if (bgmFile) await ffmpeg.deleteFile(bgmFile);
@@ -225,13 +241,13 @@ export async function renderVideo(
 }
 
 export function estimateRenderSeconds(
-  imageCount: number,
+  itemCount: number,
   audioDurationSec: number,
 ): number {
   // very rough heuristic for WASM ffmpeg on a typical laptop:
-  // ~3x realtime + per-image overhead
+  // ~3x realtime + per-item overhead
   const base = audioDurationSec * 3;
-  const overhead = imageCount * 1.5 + 6;
+  const overhead = itemCount * 1.5 + 6;
   return Math.ceil(base + overhead);
 }
 
