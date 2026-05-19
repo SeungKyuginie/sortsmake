@@ -20,10 +20,19 @@ type RequestBody = {
 };
 
 const ALLOWED_VOICES = new Set([
+  // WaveNet (안정, 차분~보통)
   'ko-KR-Wavenet-A',
   'ko-KR-Wavenet-B',
   'ko-KR-Wavenet-C',
   'ko-KR-Wavenet-D',
+  // Chirp3-HD (2024 신모델, 표현력·활기 ↑)
+  'ko-KR-Chirp3-HD-Aoede',
+  'ko-KR-Chirp3-HD-Kore',
+  'ko-KR-Chirp3-HD-Leda',
+  'ko-KR-Chirp3-HD-Zephyr',
+  'ko-KR-Chirp3-HD-Puck',
+  'ko-KR-Chirp3-HD-Charon',
+  'ko-KR-Chirp3-HD-Fenrir',
 ]);
 
 async function synthesize(
@@ -33,6 +42,15 @@ async function synthesize(
   speakingRate: number,
   pitch: number,
 ): Promise<Buffer> {
+  // Chirp3-HD는 pitch를 지원하지 않으므로 audioConfig에서 제외 (전송 시 400 에러 회피).
+  const isChirp = voiceName.includes('Chirp');
+  const audioConfig: Record<string, unknown> = {
+    audioEncoding: 'MP3',
+    speakingRate,
+    sampleRateHertz: 24000,
+  };
+  if (!isChirp) audioConfig.pitch = pitch;
+
   const res = await fetch(
     `https://texttospeech.googleapis.com/v1/text:synthesize?key=${encodeURIComponent(apiKey)}`,
     {
@@ -41,12 +59,7 @@ async function synthesize(
       body: JSON.stringify({
         input: { text },
         voice: { languageCode: 'ko-KR', name: voiceName },
-        audioConfig: {
-          audioEncoding: 'MP3',
-          speakingRate,
-          pitch,
-          sampleRateHertz: 24000,
-        },
+        audioConfig,
       }),
     },
   );

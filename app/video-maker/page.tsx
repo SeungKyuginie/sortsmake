@@ -19,12 +19,37 @@ import type {
   StepState,
 } from './types';
 
-const SPEAKERS = [
-  { id: 'ko-KR-Wavenet-A', label: 'WaveNet A (여성, 차분)' },
-  { id: 'ko-KR-Wavenet-B', label: 'WaveNet B (여성, 발랄)' },
-  { id: 'ko-KR-Wavenet-C', label: 'WaveNet C (남성, 차분)' },
-  { id: 'ko-KR-Wavenet-D', label: 'WaveNet D (남성, 활기)' },
+// Google TTS Chirp3-HD (2024 신모델) — WaveNet보다 표현력·활기 톤이 훨씬 강함.
+// 숏츠 retention에 유리하므로 Chirp3-HD를 기본 권장.
+type SpeakerOption = { id: string; label: string };
+type SpeakerGroup = { group: string; voices: SpeakerOption[] };
+
+const SPEAKER_GROUPS: SpeakerGroup[] = [
+  {
+    group: '🔥 Chirp3-HD (발랄·활기, 권장)',
+    voices: [
+      { id: 'ko-KR-Chirp3-HD-Leda', label: 'Leda (여성, 발랄/소녀)' },
+      { id: 'ko-KR-Chirp3-HD-Aoede', label: 'Aoede (여성, 명랑)' },
+      { id: 'ko-KR-Chirp3-HD-Kore', label: 'Kore (여성, 밝음)' },
+      { id: 'ko-KR-Chirp3-HD-Zephyr', label: 'Zephyr (여성, 청량)' },
+      { id: 'ko-KR-Chirp3-HD-Puck', label: 'Puck (남성, 장난기/활기)' },
+      { id: 'ko-KR-Chirp3-HD-Charon', label: 'Charon (남성, 활기)' },
+      { id: 'ko-KR-Chirp3-HD-Fenrir', label: 'Fenrir (남성, 강한 톤)' },
+    ],
+  },
+  {
+    group: '🎙 WaveNet (안정, 차분)',
+    voices: [
+      { id: 'ko-KR-Wavenet-A', label: 'WaveNet A (여성, 차분)' },
+      { id: 'ko-KR-Wavenet-B', label: 'WaveNet B (여성, 보통)' },
+      { id: 'ko-KR-Wavenet-C', label: 'WaveNet C (남성, 차분)' },
+      { id: 'ko-KR-Wavenet-D', label: 'WaveNet D (남성, 보통)' },
+    ],
+  },
 ];
+
+const ALL_SPEAKERS: SpeakerOption[] = SPEAKER_GROUPS.flatMap((g) => g.voices);
+const isChirpVoice = (id: string) => id.includes('Chirp');
 
 const INITIAL_STEPS: StepState[] = [
   { key: 'upload', label: '사진/코너 입력', status: 'active' },
@@ -52,10 +77,38 @@ export default function VideoMakerPage() {
   const [photos, setPhotos] = useState<CornerPhoto[]>([]);
   const [duration, setDuration] = useState(30);
 
-  // common voice
-  const [speaker, setSpeaker] = useState('ko-KR-Wavenet-B');
+  // common voice — Chirp3-HD Leda(발랄/소녀)를 기본값으로
+  const [speaker, setSpeaker] = useState('ko-KR-Chirp3-HD-Leda');
   const [speakingRate, setSpeakingRate] = useState(1.1);
   const [pitch, setPitch] = useState(0);
+
+  // 보이스 다양화 모드: hook · 각 코너 · cta마다 다른 보이스 지정
+  const [multiVoice, setMultiVoice] = useState(false);
+  const [hookVoice, setHookVoice] = useState<string | undefined>(undefined);
+  const [ctaVoice, setCtaVoice] = useState<string | undefined>(undefined);
+  const [cornerVoices, setCornerVoices] = useState<(string | undefined)[]>([]);
+
+  const resolveVoice = (override: string | undefined) =>
+    override && override.trim() ? override : speaker;
+
+  const updateCornerVoice = (i: number, v: string | undefined) =>
+    setCornerVoices((prev) => {
+      const next = [...prev];
+      while (next.length <= i) next.push(undefined);
+      next[i] = v;
+      return next;
+    });
+
+  const renderVoiceOptions = () =>
+    SPEAKER_GROUPS.map((g) => (
+      <optgroup key={g.group} label={g.group}>
+        {g.voices.map((s) => (
+          <option key={s.id} value={s.id}>
+            {s.label}
+          </option>
+        ))}
+      </optgroup>
+    ));
 
   // step indicator
   const [steps, setSteps] = useState<StepState[]>(INITIAL_STEPS);
@@ -231,14 +284,17 @@ export default function VideoMakerPage() {
 
   // ---------- Step 3: AI 음성 ----------
   // hook → segments[i] → cta 순으로 따로 합성해 각자 길이 측정 후 연결.
-  const synthesize = async (text: string): Promise<{ blob: Blob; dur: number }> => {
+  const synthesize = async (
+    text: string,
+    voiceName: string = speaker,
+  ): Promise<{ blob: Blob; dur: number }> => {
     const t = text.trim();
     if (!t) return { blob: new Blob([], { type: 'audio/mpeg' }), dur: 0 };
     const res = await fetch('/api/generate-voice', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        segments: [{ text: t, voiceName: speaker }],
+        segments: [{ text: t, voiceName }],
         speakingRate,
         pitch,
       }),
@@ -260,7 +316,10 @@ export default function VideoMakerPage() {
     setStep('voice', { status: 'active', detail: 'Hook 합성…' });
     try {
       const blobs: Blob[] = [];
-      const hookResult = await synthesize(script.hook);
+      const useMulti = multiVoice;
+      const hookV = useMulti ? resolveVoice(hookVoice) : speaker;
+      const ctaV = useMulti ? resolveVoice(ctaVoice) : speaker;
+      const hookResult = await synthesize(script.hook, hookV);
       blobs.push(hookResult.blob);
       const cornerDurs: number[] = [];
       for (let i = 0; i < script.segments.length; i++) {
@@ -268,12 +327,15 @@ export default function VideoMakerPage() {
           status: 'active',
           detail: `코너 ${i + 1}/${script.segments.length} 합성…`,
         });
-        const { blob, dur } = await synthesize(script.segments[i].text);
+        const cornerV = useMulti
+          ? resolveVoice(cornerVoices[i])
+          : speaker;
+        const { blob, dur } = await synthesize(script.segments[i].text, cornerV);
         blobs.push(blob);
         cornerDurs.push(dur);
       }
       setStep('voice', { status: 'active', detail: 'CTA 합성…' });
-      const ctaResult = await synthesize(script.cta);
+      const ctaResult = await synthesize(script.cta, ctaV);
       blobs.push(ctaResult.blob);
 
       const audioBlob = new Blob(blobs, { type: 'audio/mpeg' });
@@ -539,16 +601,20 @@ export default function VideoMakerPage() {
             </select>
           </div>
           <div>
-            <label className="label">보이스</label>
+            <label className="label">기본 보이스</label>
             <select
               className="input"
               value={speaker}
               onChange={(e) => setSpeaker(e.target.value)}
             >
-              {SPEAKERS.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.label}
-                </option>
+              {SPEAKER_GROUPS.map((g) => (
+                <optgroup key={g.group} label={g.group}>
+                  {g.voices.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.label}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
           </div>
@@ -690,6 +756,7 @@ export default function VideoMakerPage() {
             <h2 className="text-lg font-semibold">3. AI 음성</h2>
             <p className="text-sm text-gray-500">
               hook · 코너 · cta를 각자 합성해 길이 측정 후 연결합니다.
+              {isChirpVoice(speaker) ? ' · Chirp3-HD는 피치 슬라이더 무시됩니다.' : ''}
             </p>
           </div>
           <button
@@ -701,6 +768,70 @@ export default function VideoMakerPage() {
             {voiceLoading ? '합성 중…' : voice ? '다시 합성' : '음성 합성'}
           </button>
         </div>
+
+        {script ? (
+          <div className="mb-4 space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
+            <label className="flex items-center gap-2 text-sm font-medium text-gray-900">
+              <input
+                type="checkbox"
+                checked={multiVoice}
+                onChange={(e) => setMultiVoice(e.target.checked)}
+                className="h-4 w-4"
+              />
+              🎭 보이스 다양화 — hook · 코너 · CTA에 다른 보이스 사용
+            </label>
+            {multiVoice ? (
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <div>
+                  <label className="label">🪝 Hook 보이스</label>
+                  <select
+                    className="input"
+                    value={hookVoice ?? ''}
+                    onChange={(e) =>
+                      setHookVoice(e.target.value || undefined)
+                    }
+                  >
+                    <option value="">기본 사용</option>
+                    {renderVoiceOptions()}
+                  </select>
+                </div>
+                {script.segments.map((_, i) => (
+                  <div key={i}>
+                    <label className="label">🎬 코너 {i + 1} 보이스</label>
+                    <select
+                      className="input"
+                      value={cornerVoices[i] ?? ''}
+                      onChange={(e) =>
+                        updateCornerVoice(i, e.target.value || undefined)
+                      }
+                    >
+                      <option value="">기본 사용</option>
+                      {renderVoiceOptions()}
+                    </select>
+                  </div>
+                ))}
+                <div>
+                  <label className="label">📣 CTA 보이스</label>
+                  <select
+                    className="input"
+                    value={ctaVoice ?? ''}
+                    onChange={(e) =>
+                      setCtaVoice(e.target.value || undefined)
+                    }
+                  >
+                    <option value="">기본 사용</option>
+                    {renderVoiceOptions()}
+                  </select>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-gray-500">
+                예시 조합 — Hook은 발랄(Leda) · 코너는 활기(Puck/Aoede 번갈아) · CTA는 강조(Fenrir/Kore). 변화가 retention을 끌어올립니다.
+              </p>
+            )}
+          </div>
+        ) : null}
+
         {voice ? (
           <div className="space-y-3">
             <div className="grid grid-cols-3 gap-2 text-xs text-gray-700">
