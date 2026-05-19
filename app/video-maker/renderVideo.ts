@@ -12,17 +12,22 @@ const WIDTH = 1080;
 const HEIGHT = 1920;
 const FPS = 30;
 
-// 숏츠 안전영역 기준 좌표.
-// 상단 0~22%는 가끔 UI 상단에 가려져 hook/cta 위치로 사용 (대신 큼직한 텍스트라 OK).
-// 중앙 38~62%는 가장 안전한 카라오케 자막 위치.
-const PHRASE_Y = Math.round(HEIGHT * 0.45);
+// 숏츠 안전영역(1080×1920 기준 상단 180 / 하단 390 / 좌우 60 픽셀 회피).
+// — 출처: Kreatli, Opus.pro safe-zone 가이드.
+// 자막은 중앙(50%)이 retention 표준. hook/cta는 상단 18%에 두어 시선 잡기.
+const PHRASE_Y = Math.round(HEIGHT * 0.50);
 const HOOK_Y = Math.round(HEIGHT * 0.18);
 const CTA_Y = Math.round(HEIGHT * 0.18);
 
-const FONT_BASE = 78;
-const FONT_HIGHLIGHT = 96;
+// 한국 숏츠 자막 트렌드: 굵고 큼. 검은고딕/도현/어그로체 수준 임팩트.
+const FONT_BASE = 84;
+const FONT_HIGHLIGHT = 112;
 const FONT_HOOK = 108;
-const FONT_CTA = 108;
+const FONT_HOOK_SLAM = 136; // 첫 0~0.35초 text slam (pattern interrupt)
+const FONT_CTA = 112;
+
+// 첫 0~0.8초가 50~60% drop-off 구간 (Opus.pro). 그 안에 text slam.
+const HOOK_SLAM_DURATION = 0.35;
 
 export type RenderItem = { file: File; kind: 'image' | 'video' };
 
@@ -257,21 +262,40 @@ export async function renderVideo(
   // 3) drawtext 오버레이 — phrases + hook + cta
   const drawNodes: string[] = [];
 
-  // Hook 오버레이 (상단)
+  // Hook 오버레이 — 첫 0~SLAM초는 거대 노랑(text slam, pattern interrupt),
+  // 그 후엔 표준 흰색 hook. drop-off 구간(첫 0.8초)에 강제 시선 고정.
   if (hookText.trim() && hookEnd > hookStart) {
-    drawNodes.push(
-      drawTextNode({
-        text: hookText,
-        start: hookStart,
-        end: hookEnd,
-        fontSize: FONT_HOOK,
-        y: HOOK_Y,
-        color: 'white',
-        fontFile,
-        box: true,
-        borderw: 9,
-      }),
-    );
+    const slamEnd = Math.min(hookStart + HOOK_SLAM_DURATION, hookEnd);
+    if (slamEnd > hookStart) {
+      drawNodes.push(
+        drawTextNode({
+          text: hookText,
+          start: hookStart,
+          end: slamEnd,
+          fontSize: FONT_HOOK_SLAM,
+          y: HOOK_Y - 20,
+          color: '0xffd60a',
+          fontFile,
+          box: true,
+          borderw: 12,
+        }),
+      );
+    }
+    if (hookEnd > slamEnd) {
+      drawNodes.push(
+        drawTextNode({
+          text: hookText,
+          start: slamEnd,
+          end: hookEnd,
+          fontSize: FONT_HOOK,
+          y: HOOK_Y,
+          color: 'white',
+          fontFile,
+          box: true,
+          borderw: 9,
+        }),
+      );
+    }
   }
 
   // Phrase 오버레이 — 중간 라인
