@@ -4,113 +4,178 @@ import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile, toBlobURL } from '@ffmpeg/util';
 
 const FFMPEG_BASE = 'https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd';
+// 한글 지원 + 임팩트가 큰 Pretendard Black. ffmpeg drawtext에 직접 로드.
+const FONT_URL =
+  'https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/packages/pretendard/dist/public/static/Pretendard-Black.otf';
+
 const WIDTH = 1080;
 const HEIGHT = 1920;
 const FPS = 30;
-const FADE_DURATION = 0.5; // seconds
 
-export type RenderItem = {
-  file: File;
-  kind: 'image' | 'video';
+// 숏츠 안전영역 기준 좌표.
+// 상단 0~22%는 가끔 UI 상단에 가려져 hook/cta 위치로 사용 (대신 큼직한 텍스트라 OK).
+// 중앙 38~62%는 가장 안전한 카라오케 자막 위치.
+const PHRASE_Y = Math.round(HEIGHT * 0.45);
+const HOOK_Y = Math.round(HEIGHT * 0.18);
+const CTA_Y = Math.round(HEIGHT * 0.18);
+
+const FONT_BASE = 78;
+const FONT_HIGHLIGHT = 96;
+const FONT_HOOK = 108;
+const FONT_CTA = 108;
+
+export type RenderItem = { file: File; kind: 'image' | 'video' };
+
+export type RenderPhrase = {
+  text: string;
+  start: number; // absolute seconds in the final timeline
+  end: number;
+  highlight?: boolean; // true면 노란색 + 더 큰 폰트
 };
 
 export type RenderInput = {
   items: RenderItem[];
-  captions: string[]; // per-item caption (optional, may be empty strings)
+  itemDurations: number[]; // sum === audioDurationSec
+  phrases: RenderPhrase[]; // 절대 시간 기준 자막 큐
+  hookText: string;
+  hookStart: number;
+  hookEnd: number;
+  ctaText: string;
+  ctaStart: number;
+  ctaEnd: number;
   audio: Blob;
   audioDurationSec: number;
-  // 코너별 음성 길이(초). 항목 수와 맞아야 하고, 합 == audioDurationSec.
-  // 미지정 시 audio 길이를 항목 수로 균등 분할.
-  perItemDurations?: number[];
   bgm?: Blob | null;
-  bgmVolume?: number; // 0..1, default 0.18
-  voiceVolume?: number; // 0..1, default 1
+  bgmVolume?: number; // 0..1, default 0.16
+  voiceVolume?: number; // default 1.0
 };
 
-export type RenderProgress = {
-  ratio: number; // 0..1
-  message: string;
-};
+export type RenderProgress = { ratio: number; message: string };
 
 let ffmpegSingleton: FFmpeg | null = null;
+let fontLoaded = false;
 
 async function getFFmpeg(onLog?: (msg: string) => void): Promise<FFmpeg> {
   if (ffmpegSingleton) return ffmpegSingleton;
   const ffmpeg = new FFmpeg();
-  if (onLog) {
-    ffmpeg.on('log', ({ message }) => onLog(message));
-  }
+  if (onLog) ffmpeg.on('log', ({ message }) => onLog(message));
   await ffmpeg.load({
     coreURL: await toBlobURL(`${FFMPEG_BASE}/ffmpeg-core.js`, 'text/javascript'),
-    wasmURL: await toBlobURL(
-      `${FFMPEG_BASE}/ffmpeg-core.wasm`,
-      'application/wasm',
-    ),
+    wasmURL: await toBlobURL(`${FFMPEG_BASE}/ffmpeg-core.wasm`, 'application/wasm'),
   });
   ffmpegSingleton = ffmpeg;
   return ffmpeg;
 }
 
-function sanitizeCaption(text: string): string {
-  // ffmpeg drawtext escaping for : ' \ ,
-  return text
-    .replace(/\\/g, '\\\\')
-    .replace(/:/g, '\\:')
-    .replace(/'/g, "’")
-    .replace(/,/g, '\\,')
-    .replace(/\n/g, ' ');
+async function ensureFont(ff: FFmpeg): Promise<string | null> {
+  if (fontLoaded) return 'font.otf';
+  try {
+    const r = await fetch(FONT_URL);
+    if (!r.ok) return null;
+    const buf = new Uint8Array(await r.arrayBuffer());
+    await ff.writeFile('font.otf', buf);
+    fontLoaded = true;
+    return 'font.otf';
+  } catch {
+    return null;
+  }
 }
 
-function buildFilterGraph(
-  items: RenderItem[],
-  itemDurations: number[],
-  captions: string[],
-): string {
-  const segments: string[] = [];
-  for (let i = 0; i < items.length; i++) {
-    const T = itemDurations[i];
-    const caption = sanitizeCaption(captions[i] ?? '');
-    const isVideo = items[i].kind === 'video';
-    const base =
-      `[${i}:v]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=decrease,` +
-      `pad=${WIDTH}:${HEIGHT}:(ow-iw)/2:(oh-ih)/2:color=black,` +
-      `setsar=1,fps=${FPS},format=yuv420p`;
-    // Videos: ensure exactly T seconds (pad last frame, trim). Images are looped
-    // via -loop 1 -t T input flag, so they already produce T-second streams.
-    const lengthFix = isVideo
-      ? `,tpad=stop_mode=clone:stop_duration=${T.toFixed(3)},` +
-        `trim=duration=${T.toFixed(3)},setpts=PTS-STARTPTS`
-      : '';
-    const withText = caption
-      ? `${base}${lengthFix},drawtext=text='${caption}':fontcolor=white:fontsize=64:` +
-        `box=1:boxcolor=black@0.55:boxborderw=24:` +
-        `x=(w-text_w)/2:y=h-380`
-      : `${base}${lengthFix}`;
-    segments.push(`${withText}[v${i}]`);
-  }
+// ffmpeg drawtext 이스케이프: : ' \ , % 한 줄 만들기 위해 줄바꿈 공백 치환
+function esc(s: string): string {
+  return s
+    .replace(/\\/g, '\\\\')
+    .replace(/:/g, '\\:')
+    .replace(/'/g, '’')
+    .replace(/,/g, '\\,')
+    .replace(/%/g, '\\%')
+    .replace(/\n/g, ' ')
+    .trim();
+}
 
-  if (items.length === 1) {
-    segments.push(
-      `[v0]trim=duration=${itemDurations[0].toFixed(3)},setpts=PTS-STARTPTS[vout]`,
+type DrawTextOpts = {
+  text: string;
+  start: number;
+  end: number;
+  fontSize: number;
+  y: number;
+  color: string;       // hex like 0xffd60a 또는 named color
+  fontFile: string | null;
+  box?: boolean;
+  borderw?: number;
+};
+
+function drawTextNode(opts: DrawTextOpts): string {
+  const {
+    text,
+    start,
+    end,
+    fontSize,
+    y,
+    color,
+    fontFile,
+    box = true,
+    borderw = 7,
+  } = opts;
+  const parts: string[] = [];
+  parts.push(`text='${esc(text)}'`);
+  if (fontFile) parts.push(`fontfile=${fontFile}`);
+  parts.push(`fontcolor=${color}`);
+  parts.push(`fontsize=${fontSize}`);
+  parts.push(`borderw=${borderw}`);
+  parts.push(`bordercolor=black@0.95`);
+  parts.push(`shadowcolor=black@0.6`);
+  parts.push(`shadowx=2`);
+  parts.push(`shadowy=4`);
+  if (box) {
+    parts.push(`box=1`);
+    parts.push(`boxcolor=black@0.32`);
+    parts.push(`boxborderw=28`);
+  }
+  parts.push(`x=(w-text_w)/2`);
+  parts.push(`y=${y}`);
+  parts.push(
+    `enable='between(t,${start.toFixed(3)},${end.toFixed(3)})'`,
+  );
+  return `drawtext=${parts.join(':')}`;
+}
+
+// 한 항목용 비디오 체인 — 절대 시간 정확히 T초, 1080×1920 yuv420p 출력.
+// 이미지: 블러 커버 BG + 컨테인 FG + 미세한 sine pan (켄 번스 느낌).
+// 비디오: 블러 커버 BG + 컨테인 FG (원본 모션 보존, 추가 카메라 모션 없음).
+function buildItemChain(idx: number, T: number, isVideo: boolean): string {
+  const Tstr = T.toFixed(3);
+
+  if (isVideo) {
+    return (
+      `[${idx}:v]split=2[bg${idx}][fg${idx}];` +
+      `[bg${idx}]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,` +
+      `crop=${WIDTH}:${HEIGHT},boxblur=24:4,setsar=1[bgX${idx}];` +
+      `[fg${idx}]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=decrease,setsar=1[fgX${idx}];` +
+      `[bgX${idx}][fgX${idx}]overlay=(W-w)/2:(H-h)/2,` +
+      `tpad=stop_mode=clone:stop_duration=${Tstr},trim=duration=${Tstr},setpts=PTS-STARTPTS,` +
+      `fps=${FPS},format=yuv420p[v${idx}]`
     );
-    return segments.join(';');
   }
 
-  // Cumulative xfade with per-item durations.
-  // After each xfade, combined length = prev_cum + T_i - FADE.
-  let prev = 'v0';
-  let cum = itemDurations[0];
-  for (let i = 1; i < items.length; i++) {
-    const offset = cum - FADE_DURATION;
-    const out = i === items.length - 1 ? 'vout' : `vx${i}`;
-    segments.push(
-      `[${prev}][v${i}]xfade=transition=fade:duration=${FADE_DURATION}:offset=${offset.toFixed(3)}[${out}]`,
-    );
-    prev = out;
-    cum += itemDurations[i] - FADE_DURATION;
-  }
+  // 이미지: 블러 BG + 컨테인 FG + 미세 sine 모션
+  // FG에 가벼운 켄 번스: scale up ~12% 후 crop with time-varying offset.
+  const overscan = 1.12;
+  const wFg = Math.round(WIDTH * overscan);
+  const hFg = Math.round(HEIGHT * overscan);
+  // 좌우 ±4% 진폭의 sine + 상하 ±2% 진폭의 sine으로 부드러운 패닝
+  const xExpr = `(in_w-${WIDTH})/2 + ${WIDTH}*0.035*sin(t*PI/${Tstr})`;
+  const yExpr = `(in_h-${HEIGHT})/2 - ${HEIGHT}*0.018*sin(t*PI/${Tstr})`;
 
-  return segments.join(';');
+  return (
+    `[${idx}:v]split=2[bg${idx}][fg${idx}];` +
+    `[bg${idx}]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,` +
+    `crop=${WIDTH}:${HEIGHT},boxblur=24:4,setsar=1[bgX${idx}];` +
+    `[fg${idx}]scale=${wFg}:${hFg}:force_original_aspect_ratio=increase,` +
+    `crop=${WIDTH}:${HEIGHT}:'${xExpr}':'${yExpr}',setsar=1[fgX${idx}];` +
+    `[bgX${idx}][fgX${idx}]overlay=(W-w)/2:(H-h)/2,` +
+    `fps=${FPS},format=yuv420p,setpts=PTS-STARTPTS[v${idx}]`
+  );
 }
 
 export async function renderVideo(
@@ -119,55 +184,44 @@ export async function renderVideo(
 ): Promise<Blob> {
   const {
     items,
-    captions,
+    itemDurations,
+    phrases,
+    hookText,
+    hookStart,
+    hookEnd,
+    ctaText,
+    ctaStart,
+    ctaEnd,
     audio,
     audioDurationSec,
-    perItemDurations,
     bgm,
-    bgmVolume = 0.18,
+    bgmVolume = 0.16,
     voiceVolume = 1.0,
   } = input;
+
   if (items.length === 0) throw new Error('업로드된 미디어가 없습니다.');
+  if (items.length !== itemDurations.length)
+    throw new Error('itemDurations 길이가 items와 다릅니다.');
   if (!audioDurationSec || audioDurationSec <= 0)
     throw new Error('오디오 길이를 알 수 없습니다.');
 
   onProgress({ ratio: 0.02, message: 'FFmpeg 초기화 중…' });
   const ffmpeg = await getFFmpeg();
 
-  // 코너별 길이 결정.
-  // - perItemDurations가 주어지면 그 값을 사용 (sync 모드).
-  // - 합이 audioDurationSec과 다르면, 합의 비율을 보존해 audioDurationSec에 정규화.
-  // - 마지막 클립을 (N-1)*FADE_DURATION 만큼 늘려, xfade로 손실되는 시간만큼 보정.
-  let itemDurations: number[];
-  if (perItemDurations && perItemDurations.length === items.length) {
-    const sum = perItemDurations.reduce((a, b) => a + b, 0);
-    const scale = sum > 0 ? audioDurationSec / sum : 1;
-    itemDurations = perItemDurations.map((d) => Math.max(0.5, d * scale));
-  } else {
-    const per = audioDurationSec / items.length;
-    itemDurations = Array(items.length).fill(per);
-  }
-  if (items.length > 1) {
-    itemDurations[items.length - 1] += (items.length - 1) * FADE_DURATION;
-  }
-  const minPer = Math.min(...itemDurations);
-  if (minPer <= FADE_DURATION + 0.1 && items.length > 1) {
-    onProgress({
-      ratio: 0.03,
-      message: '경고: 미디어당 시간이 매우 짧습니다.',
-    });
-  }
+  onProgress({ ratio: 0.05, message: '한글 폰트 로딩 중…' });
+  const fontFile = await ensureFont(ffmpeg);
 
-  // Hook ffmpeg progress
   ffmpeg.on('progress', ({ progress }) => {
     if (Number.isFinite(progress)) {
-      const ratio = 0.2 + Math.min(0.78, Math.max(0, progress) * 0.78);
-      onProgress({ ratio, message: `영상 인코딩 중… ${(progress * 100).toFixed(0)}%` });
+      const ratio = 0.22 + Math.min(0.76, Math.max(0, progress) * 0.76);
+      onProgress({
+        ratio,
+        message: `영상 인코딩 중… ${(progress * 100).toFixed(0)}%`,
+      });
     }
   });
 
-  onProgress({ ratio: 0.06, message: '미디어 업로드 중…' });
-  // Write inputs. Use generic names; ffmpeg detects format from content.
+  onProgress({ ratio: 0.08, message: '미디어 업로드 중…' });
   const inputNames: string[] = [];
   for (let i = 0; i < items.length; i++) {
     const name = items[i].kind === 'video' ? `media${i}.mp4` : `media${i}.jpg`;
@@ -178,29 +232,120 @@ export async function renderVideo(
   const audioData = await fetchFile(audio);
   await ffmpeg.writeFile('audio.mp3', audioData);
 
-  let bgmFile: string | null = null;
+  let bgmFileName: string | null = null;
   if (bgm) {
-    onProgress({ ratio: 0.1, message: '배경음악 업로드 중…' });
+    onProgress({ ratio: 0.12, message: '배경음악 업로드 중…' });
     const bgmData = await fetchFile(bgm);
-    // ffmpeg picks the right demuxer from file content; extension is just a label.
-    bgmFile = 'bgm.bin';
-    await ffmpeg.writeFile(bgmFile, bgmData);
+    bgmFileName = 'bgm.bin';
+    await ffmpeg.writeFile(bgmFileName, bgmData);
   }
 
   onProgress({ ratio: 0.18, message: '필터 그래프 구성 중…' });
-  const videoFilter = buildFilterGraph(items, itemDurations, captions);
 
+  // 1) 각 항목 체인
+  const itemChains = items.map((it, i) =>
+    buildItemChain(i, itemDurations[i], it.kind === 'video'),
+  );
+
+  // 2) 모두 [concated]으로 concat
+  const concatInputs = items.map((_, i) => `[v${i}]`).join('');
+  const concatStep =
+    items.length > 1
+      ? `${concatInputs}concat=n=${items.length}:v=1:a=0[concat0]`
+      : `[v0]null[concat0]`;
+
+  // 3) drawtext 오버레이 — phrases + hook + cta
+  const drawNodes: string[] = [];
+
+  // Hook 오버레이 (상단)
+  if (hookText.trim() && hookEnd > hookStart) {
+    drawNodes.push(
+      drawTextNode({
+        text: hookText,
+        start: hookStart,
+        end: hookEnd,
+        fontSize: FONT_HOOK,
+        y: HOOK_Y,
+        color: 'white',
+        fontFile,
+        box: true,
+        borderw: 9,
+      }),
+    );
+  }
+
+  // Phrase 오버레이 — 중간 라인
+  for (const p of phrases) {
+    if (!p.text.trim() || p.end <= p.start) continue;
+    if (p.highlight) {
+      drawNodes.push(
+        drawTextNode({
+          text: p.text,
+          start: p.start,
+          end: p.end,
+          fontSize: FONT_HIGHLIGHT,
+          y: PHRASE_Y,
+          color: '0xffd60a', // 노란색 강조
+          fontFile,
+          box: true,
+          borderw: 8,
+        }),
+      );
+    } else {
+      drawNodes.push(
+        drawTextNode({
+          text: p.text,
+          start: p.start,
+          end: p.end,
+          fontSize: FONT_BASE,
+          y: PHRASE_Y,
+          color: 'white',
+          fontFile,
+        }),
+      );
+    }
+  }
+
+  // CTA 오버레이 (상단, hook과 동일 위치 — 시간이 안 겹쳐서 안전)
+  if (ctaText.trim() && ctaEnd > ctaStart) {
+    drawNodes.push(
+      drawTextNode({
+        text: ctaText,
+        start: ctaStart,
+        end: ctaEnd,
+        fontSize: FONT_CTA,
+        y: CTA_Y,
+        color: '0xffd60a',
+        fontFile,
+        box: true,
+        borderw: 9,
+      }),
+    );
+  }
+
+  const textChain =
+    drawNodes.length > 0
+      ? `[concat0]${drawNodes.join(',')}[vout]`
+      : `[concat0]null[vout]`;
+
+  // 4) 오디오 믹스
   const voiceIdx = items.length;
   const bgmIdx = items.length + 1;
-  const audioMixFilter = bgmFile
+  const audioMix = bgmFileName
     ? `;[${voiceIdx}:a]volume=${voiceVolume}[vc];` +
       `[${bgmIdx}:a]aloop=loop=-1:size=2e9,volume=${bgmVolume},` +
       `afade=t=in:st=0:d=0.6,afade=t=out:st=${Math.max(0, audioDurationSec - 0.8).toFixed(3)}:d=0.8[bg];` +
       `[vc][bg]amix=inputs=2:duration=first:dropout_transition=0[aout]`
     : '';
-  const filter = videoFilter + audioMixFilter;
-  const audioMap = bgmFile ? '[aout]' : `${voiceIdx}:a`;
+  const audioMap = bgmFileName ? '[aout]' : `${voiceIdx}:a`;
 
+  const filter = [
+    itemChains.join(';'),
+    concatStep,
+    textChain,
+  ].join(';') + audioMix;
+
+  // 5) ffmpeg 인자
   const args: string[] = [];
   for (let i = 0; i < items.length; i++) {
     if (items[i].kind === 'image') {
@@ -213,12 +358,11 @@ export async function renderVideo(
         inputNames[i],
       );
     } else {
-      // Video: let the filter graph (tpad+trim) handle length, no -t needed.
       args.push('-i', inputNames[i]);
     }
   }
   args.push('-i', 'audio.mp3');
-  if (bgmFile) args.push('-i', bgmFile);
+  if (bgmFileName) args.push('-i', bgmFileName);
   args.push(
     '-filter_complex',
     filter,
@@ -252,13 +396,10 @@ export async function renderVideo(
   const bytes = new Uint8Array(data);
   const blob = new Blob([bytes], { type: 'video/mp4' });
 
-  // cleanup
   try {
-    for (const name of inputNames) {
-      await ffmpeg.deleteFile(name);
-    }
+    for (const name of inputNames) await ffmpeg.deleteFile(name);
     await ffmpeg.deleteFile('audio.mp3');
-    if (bgmFile) await ffmpeg.deleteFile(bgmFile);
+    if (bgmFileName) await ffmpeg.deleteFile(bgmFileName);
     await ffmpeg.deleteFile('out.mp4');
   } catch {
     /* noop */
@@ -272,20 +413,18 @@ export function estimateRenderSeconds(
   itemCount: number,
   audioDurationSec: number,
 ): number {
-  // very rough heuristic for WASM ffmpeg on a typical laptop:
-  // ~3x realtime + per-item overhead
-  const base = audioDurationSec * 3;
-  const overhead = itemCount * 1.5 + 6;
+  const base = audioDurationSec * 3.2;
+  const overhead = itemCount * 1.8 + 8;
   return Math.ceil(base + overhead);
 }
 
 export async function probeAudioDuration(blob: Blob): Promise<number> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(blob);
-    const audio = document.createElement('audio');
-    audio.preload = 'metadata';
-    audio.onloadedmetadata = () => {
-      const d = audio.duration;
+    const a = document.createElement('audio');
+    a.preload = 'metadata';
+    a.onloadedmetadata = () => {
+      const d = a.duration;
       URL.revokeObjectURL(url);
       if (!Number.isFinite(d) || d <= 0) {
         reject(new Error('오디오 길이를 측정할 수 없습니다.'));
@@ -293,10 +432,10 @@ export async function probeAudioDuration(blob: Blob): Promise<number> {
         resolve(d);
       }
     };
-    audio.onerror = () => {
+    a.onerror = () => {
       URL.revokeObjectURL(url);
       reject(new Error('오디오 로딩 실패'));
     };
-    audio.src = url;
+    a.src = url;
   });
 }

@@ -1,28 +1,35 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { encodeImageForClaude, encodeVideoFirstFrame } from './encodeImage';
-import { parseCornerSegments, parseScriptSegments } from './parseSegments';
+import { distributeTimings, splitPhrases } from './parseSegments';
 import { PhotoUploader } from './PhotoUploader';
 import { StepIndicator } from './StepIndicator';
 import {
   estimateRenderSeconds,
   probeAudioDuration,
   renderVideo,
+  type RenderPhrase,
 } from './renderVideo';
-import type { CornerPhoto, StepKey, StepState } from './types';
+import type {
+  CornerPhoto,
+  ScriptSegment,
+  ShortsScript,
+  StepKey,
+  StepState,
+} from './types';
 
 const SPEAKERS = [
-  { id: 'ko-KR-Wavenet-A', label: 'WaveNet A (여성)' },
-  { id: 'ko-KR-Wavenet-B', label: 'WaveNet B (여성)' },
-  { id: 'ko-KR-Wavenet-C', label: 'WaveNet C (남성)' },
-  { id: 'ko-KR-Wavenet-D', label: 'WaveNet D (남성)' },
+  { id: 'ko-KR-Wavenet-A', label: 'WaveNet A (여성, 차분)' },
+  { id: 'ko-KR-Wavenet-B', label: 'WaveNet B (여성, 발랄)' },
+  { id: 'ko-KR-Wavenet-C', label: 'WaveNet C (남성, 차분)' },
+  { id: 'ko-KR-Wavenet-D', label: 'WaveNet D (남성, 활기)' },
 ];
 
 const INITIAL_STEPS: StepState[] = [
   { key: 'upload', label: '사진/코너 입력', status: 'active' },
-  { key: 'script', label: '스크립트 생성', status: 'idle' },
-  { key: 'voice', label: 'AI 음성 생성', status: 'idle' },
+  { key: 'script', label: '숏츠 스크립트', status: 'idle' },
+  { key: 'voice', label: 'AI 음성', status: 'idle' },
   { key: 'render', label: '영상 렌더링', status: 'idle' },
   { key: 'done', label: '다운로드', status: 'idle' },
 ];
@@ -31,46 +38,53 @@ function uid() {
   return Math.random().toString(36).slice(2, 10);
 }
 
+type VoiceTimeline = {
+  audioBlob: Blob;
+  totalDur: number;
+  hookDur: number;
+  cornerDurs: number[];
+  ctaDur: number;
+};
+
 export default function VideoMakerPage() {
+  // step 1
   const [storeName, setStoreName] = useState('');
   const [photos, setPhotos] = useState<CornerPhoto[]>([]);
   const [duration, setDuration] = useState(30);
 
+  // common voice
+  const [speaker, setSpeaker] = useState('ko-KR-Wavenet-B');
+  const [speakingRate, setSpeakingRate] = useState(1.1);
+  const [pitch, setPitch] = useState(0);
+
+  // step indicator
   const [steps, setSteps] = useState<StepState[]>(INITIAL_STEPS);
   const [error, setError] = useState<string | null>(null);
 
-  // script
-  const [script, setScript] = useState('');
+  // step 2: script
+  const [script, setScript] = useState<ShortsScript | null>(null);
   const [scriptLoading, setScriptLoading] = useState(false);
 
-  // voice
-  const [voiceMode, setVoiceMode] = useState<'single' | 'multi'>('single');
-  const [speaker, setSpeaker] = useState('ko-KR-Wavenet-A');
-  const [multiVoices, setMultiVoices] = useState<Record<string, string>>({
-    A: 'ko-KR-Wavenet-A',
-    B: 'ko-KR-Wavenet-C',
-  });
-  const [speakingRate, setSpeakingRate] = useState(1.0);
-  const [pitch, setPitch] = useState(0);
+  // step 3: voice
   const [voiceLoading, setVoiceLoading] = useState(false);
-  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
-  const [audioDuration, setAudioDuration] = useState(0);
+  const [voice, setVoice] = useState<VoiceTimeline | null>(null);
   const audioUrl = useMemo(
-    () => (audioBlob ? URL.createObjectURL(audioBlob) : null),
-    [audioBlob],
+    () => (voice ? URL.createObjectURL(voice.audioBlob) : null),
+    [voice],
   );
-  useEffect(() => {
-    return () => {
+  useEffect(
+    () => () => {
       if (audioUrl) URL.revokeObjectURL(audioUrl);
-    };
-  }, [audioUrl]);
+    },
+    [audioUrl],
+  );
 
-  // bgm
+  // step 3-2: BGM
   const [bgmMode, setBgmMode] = useState<'upload' | 'ai'>('upload');
   const [bgmFile, setBgmFile] = useState<File | null>(null);
-  const [bgmVolume, setBgmVolume] = useState(0.18);
+  const [bgmVolume, setBgmVolume] = useState(0.16);
   const [bgmPrompt, setBgmPrompt] = useState(
-    'Upbeat, cheerful Korean retail store background music. Light percussion, bright marimba, friendly and energetic. Instrumental only. Suitable for a 30-second mart promotional shorts video.',
+    'Upbeat Korean retail store background music. Light percussion, bright marimba, friendly and energetic. Instrumental only. Suitable for a 30-second mart promotional shorts video.',
   );
   const [bgmGenLoading, setBgmGenLoading] = useState(false);
   const [bgmError, setBgmError] = useState<string | null>(null);
@@ -78,49 +92,14 @@ export default function VideoMakerPage() {
     () => (bgmFile ? URL.createObjectURL(bgmFile) : null),
     [bgmFile],
   );
-  useEffect(() => {
-    return () => {
+  useEffect(
+    () => () => {
       if (bgmUrl) URL.revokeObjectURL(bgmUrl);
-    };
-  }, [bgmUrl]);
+    },
+    [bgmUrl],
+  );
 
-  const handleGenerateBgm = async () => {
-    setError(null);
-    setBgmError(null);
-    setBgmGenLoading(true);
-    try {
-      // 음성 길이가 있으면 그에 맞춰 생성, 없으면 영상 길이 사용
-      const lengthMs = Math.round(
-        (audioDuration > 0 ? audioDuration : duration) * 1000,
-      );
-      const res = await fetch('/api/generate-music', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: bgmPrompt,
-          lengthMs,
-          forceInstrumental: true,
-        }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || 'BGM 생성 실패');
-      }
-      const blob = await res.blob();
-      const file = new File([blob], `ai-bgm-${Date.now()}.mp3`, {
-        type: 'audio/mpeg',
-      });
-      setBgmFile(file);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'BGM 생성 실패';
-      setError(msg);
-      setBgmError(msg);
-    } finally {
-      setBgmGenLoading(false);
-    }
-  };
-
-  // render
+  // step 4: render
   const [rendering, setRendering] = useState(false);
   const [renderRatio, setRenderRatio] = useState(0);
   const [renderMessage, setRenderMessage] = useState('');
@@ -131,13 +110,12 @@ export default function VideoMakerPage() {
     () => (videoBlob ? URL.createObjectURL(videoBlob) : null),
     [videoBlob],
   );
-  useEffect(() => {
-    return () => {
+  useEffect(
+    () => () => {
       if (videoUrl) URL.revokeObjectURL(videoUrl);
-    };
-  }, [videoUrl]);
-
-  // tick for ETA
+    },
+    [videoUrl],
+  );
   useEffect(() => {
     if (!rendering) return;
     const id = setInterval(() => setNowTick((n) => n + 1), 500);
@@ -145,12 +123,10 @@ export default function VideoMakerPage() {
   }, [rendering]);
 
   const setStep = (key: StepKey, patch: Partial<StepState>) => {
-    setSteps((prev) =>
-      prev.map((s) => (s.key === key ? { ...s, ...patch } : s)),
-    );
+    setSteps((prev) => prev.map((s) => (s.key === key ? { ...s, ...patch } : s)));
   };
 
-  // photo handlers
+  // ---------- 사진 핸들러 ----------
   const onAdd = (files: File[]) => {
     const newOnes: CornerPhoto[] = files.map((f) => ({
       id: uid(),
@@ -185,7 +161,7 @@ export default function VideoMakerPage() {
 
   const cornersReady = photos.length > 0;
 
-  // step 2: script
+  // ---------- Step 2: 스크립트 자동 생성 ----------
   const handleGenerateScript = async () => {
     setError(null);
     setScriptLoading(true);
@@ -205,9 +181,7 @@ export default function VideoMakerPage() {
           };
         }),
       );
-      setStep('script', { status: 'active', detail: 'Claude가 이미지 분석 중…' });
-      const speakerTags =
-        voiceMode === 'multi' ? Object.keys(multiVoices) : undefined;
+      setStep('script', { status: 'active', detail: 'Claude가 분석 + 카피 작성 중…' });
       const res = await fetch('/api/generate-script', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -215,14 +189,36 @@ export default function VideoMakerPage() {
           storeName,
           durationSeconds: duration,
           corners: encoded,
-          speakerTags,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || '스크립트 생성 실패');
-      setScript(data.script as string);
+
+      const segmentsRaw = (data.segments ?? []) as ScriptSegment[];
+      // 코너 수와 segments 수 정렬
+      const aligned: ScriptSegment[] = photos.map((_, i) => {
+        const found =
+          segmentsRaw.find((s) => s.cornerIndex === i + 1) ??
+          segmentsRaw[i] ??
+          ({} as ScriptSegment);
+        return {
+          cornerIndex: i + 1,
+          text: (found.text ?? '').toString(),
+          highlight: found.highlight ? String(found.highlight) : undefined,
+        };
+      });
+
+      setScript({
+        hook: String(data.hook ?? ''),
+        cta: String(data.cta ?? ''),
+        segments: aligned,
+      });
+      // 음성/렌더 무효화
+      setVoice(null);
+      setVideoBlob(null);
+
       setStep('upload', { status: 'complete' });
-      setStep('script', { status: 'complete', detail: '수정 가능' });
+      setStep('script', { status: 'complete', detail: '편집 가능' });
       setStep('voice', { status: 'active' });
     } catch (e) {
       const msg = e instanceof Error ? e.message : '알 수 없는 오류';
@@ -233,57 +229,68 @@ export default function VideoMakerPage() {
     }
   };
 
-  // step 3: voice — 코너별로 따로 합성해 음성 길이를 측정한 뒤 하나로 합칩니다.
-  const [cornerDurations, setCornerDurations] = useState<number[]>([]);
+  // ---------- Step 3: AI 음성 ----------
+  // hook → segments[i] → cta 순으로 따로 합성해 각자 길이 측정 후 연결.
+  const synthesize = async (text: string): Promise<{ blob: Blob; dur: number }> => {
+    const t = text.trim();
+    if (!t) return { blob: new Blob([], { type: 'audio/mpeg' }), dur: 0 };
+    const res = await fetch('/api/generate-voice', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        segments: [{ text: t, voiceName: speaker }],
+        speakingRate,
+        pitch,
+      }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || '음성 합성 실패');
+    }
+    const blob = await res.blob();
+    const dur = await probeAudioDuration(blob);
+    return { blob, dur };
+  };
 
   const handleGenerateVoice = async () => {
+    if (!script) return;
     setError(null);
     setVoiceLoading(true);
-    setAudioBlob(null);
-    setAudioDuration(0);
-    setCornerDurations([]);
-    setStep('voice', { status: 'active', detail: '코너별 음성 합성 중…' });
+    setVoice(null);
+    setStep('voice', { status: 'active', detail: 'Hook 합성…' });
     try {
-      const cornerCount = photos.length || 1;
-      const cornerTexts = parseCornerSegments(script, cornerCount);
-
-      const cornerBlobs: Blob[] = [];
+      const blobs: Blob[] = [];
+      const hookResult = await synthesize(script.hook);
+      blobs.push(hookResult.blob);
       const cornerDurs: number[] = [];
-
-      for (let i = 0; i < cornerTexts.length; i++) {
+      for (let i = 0; i < script.segments.length; i++) {
         setStep('voice', {
           status: 'active',
-          detail: `코너 ${i + 1}/${cornerTexts.length} 합성 중…`,
+          detail: `코너 ${i + 1}/${script.segments.length} 합성…`,
         });
-        const text = cornerTexts[i];
-        const segments =
-          voiceMode === 'multi'
-            ? parseScriptSegments(text, multiVoices, speaker)
-            : [{ text, voiceName: speaker }];
-
-        const res = await fetch('/api/generate-voice', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ segments, speakingRate, pitch }),
-        });
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          throw new Error(data.error || `코너 ${i + 1} 음성 생성 실패`);
-        }
-        const blob = await res.blob();
-        const dur = await probeAudioDuration(blob);
-        cornerBlobs.push(blob);
+        const { blob, dur } = await synthesize(script.segments[i].text);
+        blobs.push(blob);
         cornerDurs.push(dur);
       }
+      setStep('voice', { status: 'active', detail: 'CTA 합성…' });
+      const ctaResult = await synthesize(script.cta);
+      blobs.push(ctaResult.blob);
 
-      const combined = new Blob(cornerBlobs, { type: 'audio/mpeg' });
-      const totalDur = cornerDurs.reduce((a, b) => a + b, 0);
-      setAudioBlob(combined);
-      setAudioDuration(totalDur);
-      setCornerDurations(cornerDurs);
+      const audioBlob = new Blob(blobs, { type: 'audio/mpeg' });
+      const totalDur =
+        hookResult.dur + cornerDurs.reduce((a, b) => a + b, 0) + ctaResult.dur;
+
+      setVoice({
+        audioBlob,
+        totalDur,
+        hookDur: hookResult.dur,
+        cornerDurs,
+        ctaDur: ctaResult.dur,
+      });
+      setVideoBlob(null);
       setStep('voice', {
         status: 'complete',
-        detail: `${totalDur.toFixed(1)}초 · 코너 ${cornerDurs.length}개`,
+        detail: `${totalDur.toFixed(1)}초 (hook ${hookResult.dur.toFixed(1)} · cta ${ctaResult.dur.toFixed(1)})`,
       });
       setStep('render', { status: 'active' });
     } catch (e) {
@@ -295,9 +302,105 @@ export default function VideoMakerPage() {
     }
   };
 
-  // step 4: render
+  // ---------- Step 3-2: BGM 자동 생성 ----------
+  const handleGenerateBgm = async () => {
+    setError(null);
+    setBgmError(null);
+    setBgmGenLoading(true);
+    try {
+      const lengthMs = Math.round(
+        (voice ? voice.totalDur : duration) * 1000,
+      );
+      const res = await fetch('/api/generate-music', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: bgmPrompt,
+          lengthMs,
+          forceInstrumental: true,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'BGM 생성 실패');
+      }
+      const blob = await res.blob();
+      const file = new File([blob], `ai-bgm-${Date.now()}.mp3`, {
+        type: 'audio/mpeg',
+      });
+      setBgmFile(file);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'BGM 생성 실패';
+      setError(msg);
+      setBgmError(msg);
+    } finally {
+      setBgmGenLoading(false);
+    }
+  };
+
+  // ---------- Step 4: 렌더 ----------
+  // 타임라인 빌더: hook + segments + cta → itemDurations + 절대 시간 phrases.
+  const buildRenderTimeline = () => {
+    if (!script || !voice) throw new Error('스크립트 또는 음성이 없습니다.');
+    const N = photos.length;
+    if (N === 0) throw new Error('사진이 없습니다.');
+    const cornerDurs = voice.cornerDurs.slice();
+    // 코너 수 != 사진 수면 균등 분배로 보정
+    if (cornerDurs.length !== N) {
+      const remaining = Math.max(
+        0.5,
+        voice.totalDur - voice.hookDur - voice.ctaDur,
+      );
+      while (cornerDurs.length < N) cornerDurs.push(remaining / N);
+      cornerDurs.length = N;
+    }
+
+    const itemDurations = new Array(N).fill(0).map((_, i) => cornerDurs[i]);
+    // photo[0]에 hook을 얹고, photo[N-1]에 cta를 얹음
+    itemDurations[0] += voice.hookDur;
+    itemDurations[N - 1] += voice.ctaDur;
+
+    // 절대 시간 기준 phrase 큐
+    const phrases: RenderPhrase[] = [];
+    let cursor = voice.hookDur; // 코너 시작점
+    for (let i = 0; i < N; i++) {
+      const seg = script.segments[i];
+      const text = seg?.text ?? '';
+      const highlight = seg?.highlight;
+      const phraseTexts = splitPhrases(text);
+      if (phraseTexts.length === 0) {
+        cursor += cornerDurs[i];
+        continue;
+      }
+      const timed = distributeTimings(phraseTexts, cornerDurs[i], cursor);
+      // 하이라이트 단어가 포함된 첫 phrase에 highlight 플래그
+      let highlighted = !highlight;
+      for (const t of timed) {
+        const isHi =
+          !highlighted && highlight ? t.text.includes(highlight) : false;
+        if (isHi) highlighted = true;
+        phrases.push({ ...t, highlight: isHi });
+      }
+      cursor += cornerDurs[i];
+    }
+
+    const hookStart = 0;
+    const hookEnd = voice.hookDur;
+    const ctaEnd = voice.totalDur;
+    const ctaStart = voice.totalDur - voice.ctaDur;
+
+    return {
+      itemDurations,
+      phrases,
+      hookStart,
+      hookEnd,
+      ctaStart,
+      ctaEnd,
+    };
+  };
+
   const handleRender = async () => {
-    if (!audioBlob) return;
+    if (!voice || !script) return;
     setError(null);
     setRendering(true);
     setVideoBlob(null);
@@ -306,18 +409,21 @@ export default function VideoMakerPage() {
     setRenderStartedAt(Date.now());
     setStep('render', { status: 'active', detail: '렌더링 시작' });
     try {
+      const { itemDurations, phrases, hookStart, hookEnd, ctaStart, ctaEnd } =
+        buildRenderTimeline();
       const blob = await renderVideo(
         {
           items: photos.map((p) => ({ file: p.file, kind: p.kind })),
-          captions: photos.map((p) =>
-            [p.cornerName, p.description].filter(Boolean).join(' · '),
-          ),
-          audio: audioBlob,
-          audioDurationSec: audioDuration,
-          perItemDurations:
-            cornerDurations.length === photos.length
-              ? cornerDurations
-              : undefined,
+          itemDurations,
+          phrases,
+          hookText: script.hook,
+          hookStart,
+          hookEnd,
+          ctaText: script.cta,
+          ctaStart,
+          ctaEnd,
+          audio: voice.audioBlob,
+          audioDurationSec: voice.totalDur,
           bgm: bgmFile,
           bgmVolume,
         },
@@ -354,19 +460,35 @@ export default function VideoMakerPage() {
     URL.revokeObjectURL(url);
   };
 
-  const estTotal = audioDuration
-    ? estimateRenderSeconds(photos.length, audioDuration)
+  // 스크립트 수정
+  const updateHook = (v: string) =>
+    setScript((s) => (s ? { ...s, hook: v } : s));
+  const updateCta = (v: string) =>
+    setScript((s) => (s ? { ...s, cta: v } : s));
+  const updateSegment = (i: number, patch: Partial<ScriptSegment>) =>
+    setScript((s) =>
+      s
+        ? {
+            ...s,
+            segments: s.segments.map((seg, idx) =>
+              idx === i ? { ...seg, ...patch } : seg,
+            ),
+          }
+        : s,
+    );
+
+  const estTotal = voice
+    ? estimateRenderSeconds(photos.length, voice.totalDur)
     : 0;
   const elapsed = renderStartedAt ? (Date.now() - renderStartedAt) / 1000 : 0;
   const etaRemain = (() => {
     if (!rendering || !renderStartedAt) return null;
     if (renderRatio > 0.05) {
-      const projectedTotal = elapsed / renderRatio;
-      return Math.max(1, Math.ceil(projectedTotal - elapsed));
+      const projected = elapsed / renderRatio;
+      return Math.max(1, Math.ceil(projected - elapsed));
     }
     return Math.max(1, estTotal - Math.floor(elapsed));
   })();
-  // intentional read of nowTick so it triggers re-render for ETA
   void nowTick;
 
   return (
@@ -376,8 +498,7 @@ export default function VideoMakerPage() {
           마트 숏츠 메이커 🎬
         </h1>
         <p className="mt-1 text-sm text-gray-600">
-          사진을 업로드하면 Claude가 보고 스크립트를, Google TTS가 음성을, FFmpeg WASM이
-          BGM과 함께 1080×1920 숏츠 영상을 만들어 드립니다.
+          유튜브 숏츠 전문가 패턴 — 3초 후킹 · 카라오케 자막 · 블러 커버 · CTA — 으로 1080×1920 MP4를 자동 생성합니다.
         </p>
       </header>
 
@@ -391,11 +512,11 @@ export default function VideoMakerPage() {
         </div>
       ) : null}
 
-      {/* Step 1: photos */}
+      {/* Step 1 */}
       <section className="card mb-6">
-        <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-          <div>
-            <label className="label">마트명 (선택)</label>
+        <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-4">
+          <div className="md:col-span-2">
+            <label className="label">매장명 (선택)</label>
             <input
               className="input"
               value={storeName}
@@ -404,7 +525,7 @@ export default function VideoMakerPage() {
             />
           </div>
           <div>
-            <label className="label">영상 길이(초)</label>
+            <label className="label">길이</label>
             <select
               className="input"
               value={duration}
@@ -417,6 +538,48 @@ export default function VideoMakerPage() {
               ))}
             </select>
           </div>
+          <div>
+            <label className="label">보이스</label>
+            <select
+              className="input"
+              value={speaker}
+              onChange={(e) => setSpeaker(e.target.value)}
+            >
+              {SPEAKERS.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+          <div>
+            <label className="label">
+              발화 속도 ({speakingRate.toFixed(2)}x · 숏츠 권장 1.05~1.15)
+            </label>
+            <input
+              type="range"
+              min={0.8}
+              max={1.4}
+              step={0.05}
+              value={speakingRate}
+              onChange={(e) => setSpeakingRate(Number(e.target.value))}
+              className="w-full"
+            />
+          </div>
+          <div>
+            <label className="label">피치 ({pitch})</label>
+            <input
+              type="range"
+              min={-10}
+              max={10}
+              step={1}
+              value={pitch}
+              onChange={(e) => setPitch(Number(e.target.value))}
+              className="w-full"
+            />
+          </div>
         </div>
         <PhotoUploader
           photos={photos}
@@ -427,13 +590,13 @@ export default function VideoMakerPage() {
         />
       </section>
 
-      {/* Step 2: script */}
+      {/* Step 2: 스크립트 (구조화 편집) */}
       <section className="card mb-6">
         <div className="mb-3 flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-semibold">2. 스크립트 생성</h2>
+            <h2 className="text-lg font-semibold">2. 숏츠 스크립트</h2>
             <p className="text-sm text-gray-500">
-              자동 생성 후 자유롭게 수정할 수 있습니다.
+              Claude가 사진을 분석해 <b>hook · 코너 카피 · CTA</b>를 짚어줍니다. 각각 직접 수정 가능.
             </p>
           </div>
           <button
@@ -442,206 +605,122 @@ export default function VideoMakerPage() {
             disabled={!cornersReady || scriptLoading}
             onClick={handleGenerateScript}
           >
-            {scriptLoading ? '생성 중…' : script ? '다시 생성' : '스크립트 자동 생성'}
+            {scriptLoading ? '생성 중…' : script ? '다시 생성' : '자동 생성'}
           </button>
         </div>
-        <textarea
-          className="input min-h-[160px]"
-          value={script}
-          onChange={(e) => setScript(e.target.value)}
-          placeholder="Claude가 작성한 나레이션이 여기에 표시됩니다. 직접 입력/수정도 가능합니다."
-        />
-        <div className="mt-1 text-right text-xs text-gray-500">
-          {script.length}자 · 예상 {(script.length / 5.5).toFixed(0)}초
-        </div>
-      </section>
 
-      {/* Step 3: voice */}
-      <section className="card mb-6">
-        <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-semibold">3. AI 음성 생성</h2>
-            <p className="text-sm text-gray-500">
-              Google Cloud TTS (ko-KR WaveNet)로 한국어 나레이션 MP3를 만듭니다.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1 text-xs">
-              <button
-                type="button"
-                className={`rounded-md px-3 py-1.5 font-medium ${voiceMode === 'single' ? 'bg-white shadow text-gray-900' : 'text-gray-500'}`}
-                onClick={() => setVoiceMode('single')}
-              >
-                🎙 단일
-              </button>
-              <button
-                type="button"
-                className={`rounded-md px-3 py-1.5 font-medium ${voiceMode === 'multi' ? 'bg-white shadow text-gray-900' : 'text-gray-500'}`}
-                onClick={() => setVoiceMode('multi')}
-              >
-                👥 다중
-              </button>
+        {script ? (
+          <div className="space-y-4">
+            <div>
+              <label className="label">
+                🪝 HOOK (첫 ~3초, 12자 이내 권장)
+              </label>
+              <input
+                className="input text-base font-semibold"
+                value={script.hook}
+                onChange={(e) => updateHook(e.target.value)}
+                placeholder="이거 모르면 손해예요"
+              />
+              <div className="mt-1 text-right text-xs text-gray-500">
+                {script.hook.length}자
+              </div>
             </div>
-            <button
-              type="button"
-              className="btn-primary"
-              disabled={!script.trim() || voiceLoading}
-              onClick={handleGenerateVoice}
-            >
-              {voiceLoading ? '합성 중…' : audioBlob ? '다시 생성' : '음성 생성'}
-            </button>
-          </div>
-        </div>
 
-        {voiceMode === 'single' ? (
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            <div>
-              <label className="label">보이스</label>
-              <select
-                className="input"
-                value={speaker}
-                onChange={(e) => setSpeaker(e.target.value)}
-              >
-                {SPEAKERS.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.label}
-                  </option>
-                ))}
-              </select>
+            <div className="space-y-3 rounded-lg border border-gray-100 p-3">
+              <div className="text-sm font-semibold text-gray-700">
+                🎬 코너 ({script.segments.length}개)
+              </div>
+              {script.segments.map((seg, i) => (
+                <div key={i} className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_180px]">
+                  <div>
+                    <label className="label">
+                      코너 {i + 1} 카피
+                    </label>
+                    <textarea
+                      className="input min-h-[64px]"
+                      value={seg.text}
+                      onChange={(e) =>
+                        updateSegment(i, { text: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label className="label">강조어 (노란색)</label>
+                    <input
+                      className="input"
+                      value={seg.highlight ?? ''}
+                      onChange={(e) =>
+                        updateSegment(i, {
+                          highlight: e.target.value.trim() || undefined,
+                        })
+                      }
+                      placeholder="예: 9,900원"
+                    />
+                  </div>
+                </div>
+              ))}
             </div>
+
             <div>
-              <label className="label">속도 ({speakingRate.toFixed(2)}x)</label>
+              <label className="label">
+                📣 CTA (마지막 ~2초, 12자 이내 권장)
+              </label>
               <input
-                type="range"
-                min={0.5}
-                max={1.5}
-                step={0.05}
-                value={speakingRate}
-                onChange={(e) => setSpeakingRate(Number(e.target.value))}
-                className="w-full"
+                className="input text-base font-semibold"
+                value={script.cta}
+                onChange={(e) => updateCta(e.target.value)}
+                placeholder="지금 행복마트로!"
               />
-            </div>
-            <div>
-              <label className="label">피치 ({pitch})</label>
-              <input
-                type="range"
-                min={-10}
-                max={10}
-                step={1}
-                value={pitch}
-                onChange={(e) => setPitch(Number(e.target.value))}
-                className="w-full"
-              />
+              <div className="mt-1 text-right text-xs text-gray-500">
+                {script.cta.length}자
+              </div>
             </div>
           </div>
         ) : (
-          <div className="space-y-3">
-            <div className="rounded-lg bg-amber-50 p-3 text-xs text-amber-800">
-              💡 다중 보이스 모드: 스크립트에{' '}
-              <code className="rounded bg-white px-1">[A]</code>{' '}
-              <code className="rounded bg-white px-1">[B]</code> 같은 태그를 넣으면
-              해당 화자 보이스로 읽힙니다.
-              {script && !/\[[A-D]\]/.test(script) ? (
-                <>
-                  {' '}
-                  현재 스크립트에 화자 태그가 없어요 — <b>2. 스크립트 다시 생성</b>을
-                  눌러주세요. (이미 다중 모드로 토글된 상태니까 Claude가 자동으로 박아줍니다.)
-                </>
-              ) : (
-                <> 스크립트를 새로 생성하면 Claude가 자동으로 화자를 분배해 줘요.</>
-              )}
-            </div>
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-              {Object.keys(multiVoices).map((tag) => (
-                <div key={tag}>
-                  <label className="label">
-                    화자 [{tag}]
-                  </label>
-                  <select
-                    className="input"
-                    value={multiVoices[tag]}
-                    onChange={(e) =>
-                      setMultiVoices((v) => ({ ...v, [tag]: e.target.value }))
-                    }
-                  >
-                    {SPEAKERS.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ))}
-              <div className="flex items-end gap-2">
-                {Object.keys(multiVoices).length < 4 ? (
-                  <button
-                    type="button"
-                    className="btn-secondary"
-                    onClick={() => {
-                      const used = new Set(Object.keys(multiVoices));
-                      const next = ['A', 'B', 'C', 'D'].find((t) => !used.has(t));
-                      if (next) {
-                        setMultiVoices((v) => ({
-                          ...v,
-                          [next]: 'ko-KR-Wavenet-B',
-                        }));
-                      }
-                    }}
-                  >
-                    + 화자 추가
-                  </button>
-                ) : null}
-                {Object.keys(multiVoices).length > 2 ? (
-                  <button
-                    type="button"
-                    className="btn-secondary text-red-600"
-                    onClick={() => {
-                      const keys = Object.keys(multiVoices);
-                      const last = keys[keys.length - 1];
-                      setMultiVoices((v) => {
-                        const cp = { ...v };
-                        delete cp[last];
-                        return cp;
-                      });
-                    }}
-                  >
-                    − 마지막 제거
-                  </button>
-                ) : null}
-              </div>
-            </div>
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <div>
-                <label className="label">
-                  공통 속도 ({speakingRate.toFixed(2)}x)
-                </label>
-                <input
-                  type="range"
-                  min={0.5}
-                  max={1.5}
-                  step={0.05}
-                  value={speakingRate}
-                  onChange={(e) => setSpeakingRate(Number(e.target.value))}
-                  className="w-full"
-                />
-              </div>
-              <div>
-                <label className="label">공통 피치 ({pitch})</label>
-                <input
-                  type="range"
-                  min={-10}
-                  max={10}
-                  step={1}
-                  value={pitch}
-                  onChange={(e) => setPitch(Number(e.target.value))}
-                  className="w-full"
-                />
-              </div>
-            </div>
+          <div className="rounded-lg border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500">
+            먼저 사진을 추가하고 <b>자동 생성</b> 버튼을 눌러주세요.
           </div>
         )}
-        {audioUrl ? (
-          <audio className="mt-4 w-full" controls src={audioUrl} />
+      </section>
+
+      {/* Step 3: 음성 */}
+      <section className="card mb-6">
+        <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold">3. AI 음성</h2>
+            <p className="text-sm text-gray-500">
+              hook · 코너 · cta를 각자 합성해 길이 측정 후 연결합니다.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="btn-primary"
+            disabled={!script || voiceLoading}
+            onClick={handleGenerateVoice}
+          >
+            {voiceLoading ? '합성 중…' : voice ? '다시 합성' : '음성 합성'}
+          </button>
+        </div>
+        {voice ? (
+          <div className="space-y-3">
+            <div className="grid grid-cols-3 gap-2 text-xs text-gray-700">
+              <div className="rounded bg-gray-50 px-2 py-1">
+                hook · <b>{voice.hookDur.toFixed(2)}s</b>
+              </div>
+              <div className="rounded bg-gray-50 px-2 py-1">
+                코너 ({voice.cornerDurs.length}) ·{' '}
+                <b>
+                  {voice.cornerDurs.reduce((a, b) => a + b, 0).toFixed(2)}s
+                </b>
+              </div>
+              <div className="rounded bg-gray-50 px-2 py-1">
+                cta · <b>{voice.ctaDur.toFixed(2)}s</b>
+              </div>
+            </div>
+            {audioUrl ? (
+              <audio className="w-full" controls src={audioUrl} />
+            ) : null}
+          </div>
         ) : null}
       </section>
 
@@ -651,7 +730,7 @@ export default function VideoMakerPage() {
           <div>
             <h2 className="text-lg font-semibold">3-2. 배경음악 (선택)</h2>
             <p className="text-sm text-gray-500">
-              음성과 자동으로 믹스되고, 음성 길이에 맞춰 루프 + 시작/끝 페이드가 들어갑니다.
+              음성에 자동 믹스 · 음성 길이에 맞춰 루프 + 페이드 인/아웃.
             </p>
           </div>
           <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1 text-xs">
@@ -689,7 +768,7 @@ export default function VideoMakerPage() {
                 />
               </label>
               <span className="text-xs text-gray-500">
-                저작권 무료 음원은{' '}
+                저작권 무료:{' '}
                 <a
                   href="https://pixabay.com/music/"
                   target="_blank"
@@ -707,25 +786,20 @@ export default function VideoMakerPage() {
                 >
                   YouTube Audio Library
                 </a>
-                에서 받을 수 있어요.
               </span>
             </div>
           </div>
         ) : (
           <div className="space-y-3">
             <div>
-              <label className="label">
-                음악 프롬프트 (영어로 작성하면 결과가 더 좋음)
-              </label>
+              <label className="label">음악 프롬프트 (영어가 좋음)</label>
               <textarea
                 className="input min-h-[88px]"
                 value={bgmPrompt}
                 onChange={(e) => setBgmPrompt(e.target.value)}
-                placeholder="Upbeat Korean retail store BGM, light percussion, bright, instrumental..."
               />
               <div className="mt-1 text-xs text-gray-500">
-                길이는 음성 길이(없으면 영상 길이)에 맞춰 자동으로 요청됩니다.
-                ElevenLabs 무료 티어는 월 약 10분 분량 음악까지 무료.
+                길이는 합성된 음성 길이에 맞춰 자동 요청. ElevenLabs API 키가 필요합니다.
               </div>
             </div>
             <button
@@ -734,7 +808,11 @@ export default function VideoMakerPage() {
               disabled={!bgmPrompt.trim() || bgmGenLoading}
               onClick={handleGenerateBgm}
             >
-              {bgmGenLoading ? 'AI 음악 생성 중… (보통 20~40초)' : bgmFile ? '다시 생성' : '음악 생성하기'}
+              {bgmGenLoading
+                ? 'AI 음악 생성 중… (20~40초)'
+                : bgmFile
+                  ? '다시 생성'
+                  : '음악 생성하기'}
             </button>
             {bgmError ? (
               <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800">
@@ -762,41 +840,40 @@ export default function VideoMakerPage() {
             {bgmUrl ? <audio className="w-full" controls src={bgmUrl} /> : null}
             <div>
               <label className="label">
-                BGM 볼륨 ({Math.round(bgmVolume * 100)}% — 음성 대비)
+                BGM 볼륨 ({Math.round(bgmVolume * 100)}%)
               </label>
               <input
                 type="range"
                 min={0}
-                max={0.6}
+                max={0.5}
                 step={0.02}
                 value={bgmVolume}
                 onChange={(e) => setBgmVolume(Number(e.target.value))}
                 className="w-full"
               />
               <div className="mt-1 text-xs text-gray-500">
-                권장: 15~25%. 너무 크면 나레이션이 묻힙니다.
+                숏츠 권장: 12~18%. 그 이상이면 나레이션이 묻힙니다.
               </div>
             </div>
           </div>
         ) : (
           <div className="mt-4 rounded-lg border border-dashed border-gray-300 p-4 text-center text-sm text-gray-500">
-            배경음악 없이도 영상 생성은 가능합니다.
+            배경음악 없이도 영상 생성 가능.
           </div>
         )}
       </section>
 
-      {/* Step 4: render */}
+      {/* Step 4: 렌더 */}
       <section className="card mb-6">
         <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold">4. 영상 렌더링</h2>
             <p className="text-sm text-gray-500">
-              브라우저에서 직접 1080×1920 MP4로 인코딩합니다 (FFmpeg WASM).
-              {audioDuration ? (
+              FFmpeg WASM이 브라우저에서 1080×1920 MP4를 인코딩합니다.
+              {voice ? (
                 <>
                   {' '}
-                  예상 렌더링 시간 약 <b>{estTotal}초</b> · 음성 길이{' '}
-                  {audioDuration.toFixed(1)}초.
+                  · 예상 약 <b>{estTotal}초</b> · 음성 {voice.totalDur.toFixed(1)}초
                 </>
               ) : null}
             </p>
@@ -804,10 +881,10 @@ export default function VideoMakerPage() {
           <button
             type="button"
             className="btn-primary"
-            disabled={!audioBlob || rendering || photos.length === 0}
+            disabled={!voice || rendering || photos.length === 0}
             onClick={handleRender}
           >
-            {rendering ? '렌더링 중…' : videoBlob ? '다시 렌더링' : '영상 렌더링 시작'}
+            {rendering ? '렌더링 중…' : videoBlob ? '다시 렌더링' : '렌더링 시작'}
           </button>
         </div>
 
@@ -824,9 +901,7 @@ export default function VideoMakerPage() {
               <span>
                 {(renderRatio * 100).toFixed(0)}% ·{' '}
                 {rendering
-                  ? `경과 ${Math.floor(elapsed)}s${
-                      etaRemain != null ? ` · 남은 시간 ~${etaRemain}s` : ''
-                    }`
+                  ? `경과 ${Math.floor(elapsed)}s${etaRemain != null ? ` · 남은 ~${etaRemain}s` : ''}`
                   : '완료'}
               </span>
             </div>
@@ -834,7 +909,7 @@ export default function VideoMakerPage() {
         ) : null}
       </section>
 
-      {/* Step 5: download */}
+      {/* Step 5: 다운로드 */}
       {videoBlob && videoUrl ? (
         <section className="card mb-6">
           <h2 className="mb-3 text-lg font-semibold">5. 완성 영상</h2>
@@ -846,8 +921,8 @@ export default function VideoMakerPage() {
             />
             <div className="flex-1 space-y-2">
               <p className="text-sm text-gray-600">
-                9:16 1080×1920 MP4 · {(videoBlob.size / 1024 / 1024).toFixed(1)} MB ·
-                길이 {audioDuration.toFixed(1)}초
+                9:16 1080×1920 MP4 · {(videoBlob.size / 1024 / 1024).toFixed(1)} MB ·{' '}
+                {voice?.totalDur.toFixed(1)}초
               </p>
               <button className="btn-primary" onClick={handleDownload}>
                 ⬇︎ MP4 다운로드
@@ -858,8 +933,7 @@ export default function VideoMakerPage() {
       ) : null}
 
       <footer className="mt-10 text-center text-xs text-gray-400">
-        ffmpeg.wasm은 브라우저에서 동작합니다. 페이지가 cross-origin isolated 모드로
-        제공되어야 합니다 (next.config.js의 COOP/COEP 설정).
+        ffmpeg.wasm은 브라우저에서 동작합니다 · COOP/COEP cross-origin isolated 필요 (next.config.js 설정됨)
       </footer>
     </main>
   );
