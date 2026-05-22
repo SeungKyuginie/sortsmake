@@ -189,26 +189,23 @@ function buildItemChain(idx: number, T: number, isVideo: boolean, droneShot = fa
     );
   }
 
-  // 기본 이미지: FG를 86% 크기로 줄여 블러 BG가 프레임처럼 보이게 하고,
-  // FG 내부는 cover 모드(가장자리 살짝 자르되 검은 띠 없음)로 채운 뒤 슬로우 줌인.
+  // 기본 이미지: cover 모드(검은 띠 없음)로 전체 화면 채우고 슬로우 줌인.
   const imgFrames = Math.max(2, Math.round(T * FPS));
-  const fgW = Math.round(WIDTH * 0.86); // 928
-  const fgH = Math.round(HEIGHT * 0.86); // 1651
-  const preW = Math.round(fgW * 1.3);
-  const preH = Math.round(fgH * 1.3);
+  const wOver = Math.round(WIDTH * 1.15);
+  const hOver = Math.round(HEIGHT * 1.15);
 
   return (
     `[${idx}:v]split=2[bg${idx}][fg${idx}];` +
     `[bg${idx}]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,` +
     `crop=${WIDTH}:${HEIGHT},boxblur=24:4,setsar=1[bgX${idx}];` +
-    // FG: cover 모드 → 1.3x 프리스케일 → zoompan 슬로우 줌인 → fgW x fgH 출력
-    `[fg${idx}]scale=${fgW}:${fgH}:force_original_aspect_ratio=increase,` +
-    `crop=${fgW}:${fgH},` +
-    `scale=${preW}:${preH},setsar=1,` +
+    // FG: cover 모드 → 1.15x 프리스케일 → zoompan 슬로우 줌인 → 전체 화면 출력
+    `[fg${idx}]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,` +
+    `crop=${WIDTH}:${HEIGHT},` +
+    `scale=${wOver}:${hOver},setsar=1,` +
     `trim=end_frame=1,setpts=PTS-STARTPTS,` +
     `zoompan=z='min(1.10,1.0+${(0.10 / (imgFrames - 1)).toFixed(6)}*on)':` +
     `x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':` +
-    `d=${imgFrames}:s=${fgW}x${fgH}:fps=${FPS}[fgX${idx}];` +
+    `d=${imgFrames}:s=${WIDTH}x${HEIGHT}:fps=${FPS}[fgX${idx}];` +
     `[bgX${idx}][fgX${idx}]overlay=(W-w)/2:(H-h)/2,` +
     `fps=${FPS},format=yuv420p,setpts=PTS-STARTPTS[v${idx}]`
   );
