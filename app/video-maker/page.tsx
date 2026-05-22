@@ -13,16 +13,16 @@ import {
 import type { CornerPhoto, StepKey, StepState } from './types';
 
 const SPEAKERS = [
-  { id: 'ko-KR-Wavenet-A', label: 'WaveNet A (여성)' },
-  { id: 'ko-KR-Wavenet-B', label: 'WaveNet B (여성)' },
-  { id: 'ko-KR-Wavenet-C', label: 'WaveNet C (남성)' },
-  { id: 'ko-KR-Wavenet-D', label: 'WaveNet D (남성)' },
+  { id: 'ko-KR-Wavenet-A', label: '여성 A' },
+  { id: 'ko-KR-Wavenet-B', label: '여성 B' },
+  { id: 'ko-KR-Wavenet-C', label: '남성 A' },
+  { id: 'ko-KR-Wavenet-D', label: '남성 B' },
 ];
 
 const INITIAL_STEPS: StepState[] = [
   { key: 'upload', label: '사진/코너 입력', status: 'active' },
   { key: 'script', label: '스크립트 생성', status: 'idle' },
-  { key: 'voice', label: 'AI 음성 생성', status: 'idle' },
+  { key: 'voice', label: '음성 생성', status: 'idle' },
   { key: 'render', label: '영상 렌더링', status: 'idle' },
   { key: 'done', label: '다운로드', status: 'idle' },
 ];
@@ -205,7 +205,7 @@ export default function VideoMakerPage() {
           };
         }),
       );
-      setStep('script', { status: 'active', detail: 'Claude가 이미지 분석 중…' });
+      setStep('script', { status: 'active', detail: '이미지 분석 중…' });
       const speakerTags =
         voiceMode === 'multi' ? Object.keys(multiVoices) : undefined;
       const res = await fetch('/api/generate-script', {
@@ -376,8 +376,8 @@ export default function VideoMakerPage() {
           마트 숏츠 메이커 🎬
         </h1>
         <p className="mt-1 text-sm text-gray-600">
-          사진을 업로드하면 Claude가 보고 스크립트를, Google TTS가 음성을, FFmpeg WASM이
-          BGM과 함께 1080×1920 숏츠 영상을 만들어 드립니다.
+          사진을 업로드하면 자동으로 스크립트와 음성, 배경음악을 입혀
+          1080×1920 숏츠 영상을 만들어 드립니다.
         </p>
       </header>
 
@@ -449,7 +449,7 @@ export default function VideoMakerPage() {
           className="input min-h-[160px]"
           value={script}
           onChange={(e) => setScript(e.target.value)}
-          placeholder="Claude가 작성한 나레이션이 여기에 표시됩니다. 직접 입력/수정도 가능합니다."
+          placeholder="자동 생성된 나레이션이 여기에 표시됩니다. 직접 입력/수정도 가능합니다."
         />
         <div className="mt-1 text-right text-xs text-gray-500">
           {script.length}자 · 예상 {(script.length / 5.5).toFixed(0)}초
@@ -460,9 +460,9 @@ export default function VideoMakerPage() {
       <section className="card mb-6">
         <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold">3. AI 음성 생성</h2>
+            <h2 className="text-lg font-semibold">3. 음성 생성</h2>
             <p className="text-sm text-gray-500">
-              Google Cloud TTS (ko-KR WaveNet)로 한국어 나레이션 MP3를 만듭니다.
+              한국어 나레이션 음성을 자동으로 만들어 줍니다.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -545,10 +545,10 @@ export default function VideoMakerPage() {
                 <>
                   {' '}
                   현재 스크립트에 화자 태그가 없어요 — <b>2. 스크립트 다시 생성</b>을
-                  눌러주세요. (이미 다중 모드로 토글된 상태니까 Claude가 자동으로 박아줍니다.)
+                  눌러주세요. (이미 다중 모드로 토글된 상태니까 자동으로 박아줍니다.)
                 </>
               ) : (
-                <> 스크립트를 새로 생성하면 Claude가 자동으로 화자를 분배해 줘요.</>
+                <> 스크립트를 새로 생성하면 자동으로 화자를 분배해 줘요.</>
               )}
             </div>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
@@ -667,7 +667,7 @@ export default function VideoMakerPage() {
               className={`rounded-md px-3 py-1.5 font-medium ${bgmMode === 'ai' ? 'bg-white shadow text-gray-900' : 'text-gray-500'}`}
               onClick={() => setBgmMode('ai')}
             >
-              ✨ AI 생성
+              ✨ 자동 생성
             </button>
           </div>
         </div>
@@ -725,7 +725,6 @@ export default function VideoMakerPage() {
               />
               <div className="mt-1 text-xs text-gray-500">
                 길이는 음성 길이(없으면 영상 길이)에 맞춰 자동으로 요청됩니다.
-                ElevenLabs 무료 티어는 월 약 10분 분량 음악까지 무료.
               </div>
             </div>
             <button
@@ -734,7 +733,7 @@ export default function VideoMakerPage() {
               disabled={!bgmPrompt.trim() || bgmGenLoading}
               onClick={handleGenerateBgm}
             >
-              {bgmGenLoading ? 'AI 음악 생성 중… (보통 20~40초)' : bgmFile ? '다시 생성' : '음악 생성하기'}
+              {bgmGenLoading ? '음악 생성 중… (보통 20~40초)' : bgmFile ? '다시 생성' : '음악 생성하기'}
             </button>
             {bgmError ? (
               <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800">
@@ -791,7 +790,7 @@ export default function VideoMakerPage() {
           <div>
             <h2 className="text-lg font-semibold">4. 영상 렌더링</h2>
             <p className="text-sm text-gray-500">
-              브라우저에서 직접 1080×1920 MP4로 인코딩합니다 (FFmpeg WASM).
+              브라우저에서 직접 1080×1920 MP4로 인코딩합니다.
               {audioDuration ? (
                 <>
                   {' '}
@@ -858,8 +857,7 @@ export default function VideoMakerPage() {
       ) : null}
 
       <footer className="mt-10 text-center text-xs text-gray-400">
-        ffmpeg.wasm은 브라우저에서 동작합니다. 페이지가 cross-origin isolated 모드로
-        제공되어야 합니다 (next.config.js의 COOP/COEP 설정).
+        영상 인코딩은 브라우저에서 직접 처리됩니다.
       </footer>
     </main>
   );
