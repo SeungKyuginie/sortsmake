@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { put } from '@vercel/blob';
 import LumaAI from 'lumaai';
 
 export const runtime = 'nodejs';
@@ -8,12 +7,10 @@ export const maxDuration = 60;
 type RequestBody = {
   imageBase64: string;
   mediaType?: string;
-  prompt?: string; // 사용자가 별도 프롬프트를 줄 경우
-  cornerHint?: string; // 코너명 + 힌트 → 자동 프롬프트 생성용
+  prompt?: string;
+  cornerHint?: string;
 };
 
-// 마트 사진을 드론 항공샷으로 변환하기 위한 기본 프롬프트.
-// 매번 비슷한 톤·움직임을 내기 위해 동일 템플릿 사용.
 function buildPrompt(cornerHint?: string, override?: string): string {
   if (override?.trim()) return override.trim();
   const subject = cornerHint?.trim() || 'fresh products on a grocery store display';
@@ -25,18 +22,51 @@ function buildPrompt(cornerHint?: string, override?: string): string {
   );
 }
 
+// ImgBB에 이미지를 업로드해 공개 URL 확보. expiration 초 후 자동 삭제.
+async function uploadToImgBB(
+  apiKey: string,
+  base64: string,
+  expirationSec = 600,
+): Promise<string> {
+  const form = new URLSearchParams();
+  form.append('image', base64);
+
+  const res = await fetch(
+    `https://api.imgbb.com/1/upload?key=${encodeURIComponent(apiKey)}&expiration=${expirationSec}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: form,
+    },
+  );
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`ImgBB 업로드 실패 (${res.status}): ${err.slice(0, 200)}`);
+  }
+  const data = (await res.json()) as {
+    success?: boolean;
+    data?: { url?: string; display_url?: string };
+    error?: { message?: string };
+  };
+  const url = data?.data?.url || data?.data?.display_url;
+  if (!data.success || !url) {
+    throw new Error(data.error?.message || 'ImgBB 응답에 URL이 없습니다.');
+  }
+  return url;
+}
+
 export async function POST(req: Request) {
   const lumaKey = process.env.LUMAAI_API_KEY;
-  const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
+  const imgbbKey = process.env.IMGBB_API_KEY;
   if (!lumaKey) {
     return NextResponse.json(
       { error: 'LUMAAI_API_KEY가 설정되지 않았습니다.' },
       { status: 500 },
     );
   }
-  if (!blobToken) {
+  if (!imgbbKey) {
     return NextResponse.json(
-      { error: 'BLOB_READ_WRITE_TOKEN이 설정되지 않았습니다.' },
+      { error: 'IMGBB_API_KEY가 설정되지 않았습니다.' },
       { status: 500 },
     );
   }
@@ -55,23 +85,9 @@ export async function POST(req: Request) {
     );
   }
 
-  const imageBuffer = Buffer.from(body.imageBase64, 'base64');
-  const mediaType = body.mediaType ?? 'image/jpeg';
-  const ext =
-    mediaType === 'image/png'
-      ? 'png'
-      : mediaType === 'image/webp'
-        ? 'webp'
-        : 'jpg';
-
   try {
-    // 1) 이미지를 Vercel Blob에 업로드해 공개 URL 확보 (Luma는 URL만 받음)
-    const blobName = `drone-input/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-    const blob = await put(blobName, imageBuffer, {
-      access: 'public',
-      contentType: mediaType,
-      token: blobToken,
-    });
+    // 1) 이미지를 ImgBB에 업로드해 공개 URL 확보 (10분 후 자동 삭제)
+    const imageUrl = await uploadToImgBB(imgbbKey, body.imageBase64, 600);
 
     // 2) Luma Dream Machine API로 영상 생성 요청
     const client = new LumaAI({ authToken: lumaKey });
@@ -83,14 +99,13 @@ export async function POST(req: Request) {
       keyframes: {
         frame0: {
           type: 'image',
-          url: blob.url,
+          url: imageUrl,
         },
       },
     });
 
     return NextResponse.json({
       generationId: generation.id,
-      blobUrl: blob.url, // 클라이언트가 나중에 정리 가능
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Luma API 호출 실패';
