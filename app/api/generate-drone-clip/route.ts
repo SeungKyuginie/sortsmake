@@ -88,20 +88,23 @@ export async function POST(req: Request) {
     // 1) 이미지를 ImgBB에 업로드해 공개 URL 확보 (10분 후 자동 삭제)
     const imageUrl = await uploadToImgBB(imgbbKey, body.imageBase64, 600);
 
-    // 2) Luma Dream Machine API 직접 호출 (SDK 우회로 정확한 에러 노출)
+    // 2) Luma 새 API (agents.lumalabs.ai) 호출 — 마이그레이션 후 엔드포인트
     const lumaRes = await fetch(
-      'https://api.lumalabs.ai/dream-machine/v1/generations',
+      'https://agents.lumalabs.ai/v1/generations',
       {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${lumaKey}`,
           'Content-Type': 'application/json',
+          Accept: 'application/json',
         },
         body: JSON.stringify({
           prompt: buildPrompt(body.cornerHint, body.prompt),
           model: 'ray-2',
-          resolution: '720p',
+          type: 'video',
+          aspect_ratio: '9:16', // 숏츠용 세로 비율
           duration: '5s',
+          resolution: '720p',
           keyframes: {
             frame0: { type: 'image', url: imageUrl },
           },

@@ -23,10 +23,11 @@ export async function GET(req: Request) {
 
   try {
     const res = await fetch(
-      `https://api.lumalabs.ai/dream-machine/v1/generations/${encodeURIComponent(id)}`,
+      `https://agents.lumalabs.ai/v1/generations/${encodeURIComponent(id)}`,
       {
         headers: {
           Authorization: `Bearer ${lumaKey}`,
+          Accept: 'application/json',
         },
       },
     );
