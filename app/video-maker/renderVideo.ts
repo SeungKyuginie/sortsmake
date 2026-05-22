@@ -166,21 +166,23 @@ function buildItemChain(idx: number, T: number, isVideo: boolean, droneShot = fa
   }
 
   if (droneShot) {
-    // 드론샷: 1.3x 확대에서 1.0x로 서서히 줌아웃 (풀백 효과)
-    const overscan = 1.3;
-    const wFg = Math.round(WIDTH * overscan);
-    const hFg = Math.round(HEIGHT * overscan);
-    // t=0: crop 중앙에서 overscan 크기 전체, t=T: 원본 크기로 줌아웃
-    const zoomExpr = `1.0 + ${overscan - 1.0} * (1 - t/${Tstr})`;
-    const xExpr = `(in_w - ${WIDTH}/${zoomExpr}) / 2`;
-    const yExpr = `(in_h - ${HEIGHT}/${zoomExpr}) / 2`;
+    // 드론샷: zoompan으로 1.3x → 1.0x 풀백 (드론이 뒤로 빠지는 느낌)
+    const droneFrames = Math.max(2, Math.round(T * FPS));
+    const wOver = Math.round(WIDTH * 1.3);
+    const hOver = Math.round(HEIGHT * 1.3);
 
     return (
       `[${idx}:v]split=2[bg${idx}][fg${idx}];` +
       `[bg${idx}]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,` +
       `crop=${WIDTH}:${HEIGHT},boxblur=24:4,setsar=1[bgX${idx}];` +
-      `[fg${idx}]scale=${wFg}:${hFg}:force_original_aspect_ratio=increase,` +
-      `crop=${WIDTH}:${HEIGHT}:'${xExpr}':'${yExpr}',setsar=1[fgX${idx}];` +
+      // FG: 1080x1920 컨테인 + 검은 패드 → 확대 → 1프레임만 골라 zoompan으로 줌아웃
+      `[fg${idx}]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=decrease,` +
+      `pad=${WIDTH}:${HEIGHT}:(ow-iw)/2:(oh-ih)/2,` +
+      `scale=${wOver}:${hOver},setsar=1,` +
+      `trim=end_frame=1,setpts=PTS-STARTPTS,` +
+      `zoompan=z='if(eq(on,1),1.3,max(1.0,zoom-${(0.3 / (droneFrames - 1)).toFixed(6)}))':` +
+      `x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':` +
+      `d=${droneFrames}:s=${WIDTH}x${HEIGHT}:fps=${FPS}[fgX${idx}];` +
       `[bgX${idx}][fgX${idx}]overlay=(W-w)/2:(H-h)/2,` +
       `fps=${FPS},format=yuv420p,setpts=PTS-STARTPTS[v${idx}]`
     );
