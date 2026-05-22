@@ -166,11 +166,11 @@ function buildItemChain(idx: number, T: number, isVideo: boolean, droneShot = fa
   }
 
   if (droneShot) {
-    // 드론샷(항공): 1.3x → 1.0x 줌아웃 + 좌→우 미세 드리프트 (드론 상승 + 글라이드)
+    // 드론샷(항공): 1.6x → 1.0x 강한 풀백 + 좌→우 드리프트 (드론이 극적으로 멀어지는 느낌)
     const droneFrames = Math.max(2, Math.round(T * FPS));
-    const wOver = Math.round(WIDTH * 1.3);
-    const hOver = Math.round(HEIGHT * 1.3);
-    const xExpr = `iw/2-(iw/zoom/2)+iw*0.03*(on/${droneFrames}-0.5)`;
+    const wOver = Math.round(WIDTH * 1.6);
+    const hOver = Math.round(HEIGHT * 1.6);
+    const xExpr = `iw/2-(iw/zoom/2)+iw*0.04*(on/${droneFrames}-0.5)`;
     const yExpr = `ih/2-(ih/zoom/2)`;
 
     return (
@@ -181,7 +181,7 @@ function buildItemChain(idx: number, T: number, isVideo: boolean, droneShot = fa
       `pad=${WIDTH}:${HEIGHT}:(ow-iw)/2:(oh-ih)/2,` +
       `scale=${wOver}:${hOver},setsar=1,` +
       `trim=end_frame=1,setpts=PTS-STARTPTS,` +
-      `zoompan=z='if(eq(on,1),1.3,max(1.0,zoom-${(0.3 / (droneFrames - 1)).toFixed(6)}))':` +
+      `zoompan=z='if(eq(on,1),1.6,max(1.0,zoom-${(0.6 / (droneFrames - 1)).toFixed(6)}))':` +
       `x='${xExpr}':y='${yExpr}':` +
       `d=${droneFrames}:s=${WIDTH}x${HEIGHT}:fps=${FPS}[fgX${idx}];` +
       `[bgX${idx}][fgX${idx}]overlay=(W-w)/2:(H-h)/2,` +
@@ -189,24 +189,26 @@ function buildItemChain(idx: number, T: number, isVideo: boolean, droneShot = fa
     );
   }
 
-  // 기본 이미지: 부드러운 슬로우 줌인 (1.0 → 1.05, push-in 영화 효과)
-  // crop 정수 픽셀 문제 회피 — zoompan은 서브픽셀 정밀도로 매끄럽게 처리.
+  // 기본 이미지: FG를 86% 크기로 줄여 블러 BG를 프레임처럼 두르고,
+  // FG 내부에서 1.0 → 1.10 슬로우 줌인. 줌이 잘리는 가장자리는 블러 안쪽이라 자연스러움.
   const imgFrames = Math.max(2, Math.round(T * FPS));
-  const wOver = Math.round(WIDTH * 1.1);
-  const hOver = Math.round(HEIGHT * 1.1);
+  const fgW = Math.round(WIDTH * 0.86); // 928
+  const fgH = Math.round(HEIGHT * 0.86); // 1651
+  const preW = Math.round(fgW * 1.3); // zoompan 입력용 프리스케일
+  const preH = Math.round(fgH * 1.3);
 
   return (
     `[${idx}:v]split=2[bg${idx}][fg${idx}];` +
     `[bg${idx}]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,` +
     `crop=${WIDTH}:${HEIGHT},boxblur=24:4,setsar=1[bgX${idx}];` +
-    // FG: 1080x1920 컨테인 + 패드 → 1.1x 확대 → 1프레임만 골라 zoompan 줌인
-    `[fg${idx}]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=decrease,` +
-    `pad=${WIDTH}:${HEIGHT}:(ow-iw)/2:(oh-ih)/2,` +
-    `scale=${wOver}:${hOver},setsar=1,` +
+    // FG: fgW x fgH로 컨테인 + 패드 → 1.3x 프리스케일 → zoompan 슬로우 줌인 → fgW x fgH 출력
+    `[fg${idx}]scale=${fgW}:${fgH}:force_original_aspect_ratio=decrease,` +
+    `pad=${fgW}:${fgH}:(ow-iw)/2:(oh-ih)/2,` +
+    `scale=${preW}:${preH},setsar=1,` +
     `trim=end_frame=1,setpts=PTS-STARTPTS,` +
-    `zoompan=z='min(1.05,1.0+${(0.05 / (imgFrames - 1)).toFixed(6)}*on)':` +
+    `zoompan=z='min(1.10,1.0+${(0.10 / (imgFrames - 1)).toFixed(6)}*on)':` +
     `x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':` +
-    `d=${imgFrames}:s=${WIDTH}x${HEIGHT}:fps=${FPS}[fgX${idx}];` +
+    `d=${imgFrames}:s=${fgW}x${fgH}:fps=${FPS}[fgX${idx}];` +
     `[bgX${idx}][fgX${idx}]overlay=(W-w)/2:(H-h)/2,` +
     `fps=${FPS},format=yuv420p,setpts=PTS-STARTPTS[v${idx}]`
   );
