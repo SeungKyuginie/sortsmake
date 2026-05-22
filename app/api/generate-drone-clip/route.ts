@@ -100,7 +100,7 @@ export async function POST(req: Request) {
         },
         body: JSON.stringify({
           prompt: buildPrompt(body.cornerHint, body.prompt),
-          model: 'ray-2',
+          model: 'uni-1',
           type: 'video',
           aspect_ratio: '9:16', // 숏츠용 세로 비율
           duration: '5s',
