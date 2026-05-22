@@ -177,8 +177,8 @@ function buildItemChain(idx: number, T: number, isVideo: boolean, droneShot = fa
       `[${idx}:v]split=2[bg${idx}][fg${idx}];` +
       `[bg${idx}]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,` +
       `crop=${WIDTH}:${HEIGHT},boxblur=24:4,setsar=1[bgX${idx}];` +
-      `[fg${idx}]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=decrease,` +
-      `pad=${WIDTH}:${HEIGHT}:(ow-iw)/2:(oh-ih)/2,` +
+      `[fg${idx}]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,` +
+      `crop=${WIDTH}:${HEIGHT},` +
       `scale=${wOver}:${hOver},setsar=1,` +
       `trim=end_frame=1,setpts=PTS-STARTPTS,` +
       `zoompan=z='if(eq(on,1),1.6,max(1.0,zoom-${(0.6 / (droneFrames - 1)).toFixed(6)}))':` +
@@ -189,21 +189,21 @@ function buildItemChain(idx: number, T: number, isVideo: boolean, droneShot = fa
     );
   }
 
-  // 기본 이미지: FG를 86% 크기로 줄여 블러 BG를 프레임처럼 두르고,
-  // FG 내부에서 1.0 → 1.10 슬로우 줌인. 줌이 잘리는 가장자리는 블러 안쪽이라 자연스러움.
+  // 기본 이미지: FG를 86% 크기로 줄여 블러 BG가 프레임처럼 보이게 하고,
+  // FG 내부는 cover 모드(가장자리 살짝 자르되 검은 띠 없음)로 채운 뒤 슬로우 줌인.
   const imgFrames = Math.max(2, Math.round(T * FPS));
   const fgW = Math.round(WIDTH * 0.86); // 928
   const fgH = Math.round(HEIGHT * 0.86); // 1651
-  const preW = Math.round(fgW * 1.3); // zoompan 입력용 프리스케일
+  const preW = Math.round(fgW * 1.3);
   const preH = Math.round(fgH * 1.3);
 
   return (
     `[${idx}:v]split=2[bg${idx}][fg${idx}];` +
     `[bg${idx}]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,` +
     `crop=${WIDTH}:${HEIGHT},boxblur=24:4,setsar=1[bgX${idx}];` +
-    // FG: fgW x fgH로 컨테인 + 패드 → 1.3x 프리스케일 → zoompan 슬로우 줌인 → fgW x fgH 출력
-    `[fg${idx}]scale=${fgW}:${fgH}:force_original_aspect_ratio=decrease,` +
-    `pad=${fgW}:${fgH}:(ow-iw)/2:(oh-ih)/2,` +
+    // FG: cover 모드 → 1.3x 프리스케일 → zoompan 슬로우 줌인 → fgW x fgH 출력
+    `[fg${idx}]scale=${fgW}:${fgH}:force_original_aspect_ratio=increase,` +
+    `crop=${fgW}:${fgH},` +
     `scale=${preW}:${preH},setsar=1,` +
     `trim=end_frame=1,setpts=PTS-STARTPTS,` +
     `zoompan=z='min(1.10,1.0+${(0.10 / (imgFrames - 1)).toFixed(6)}*on)':` +
