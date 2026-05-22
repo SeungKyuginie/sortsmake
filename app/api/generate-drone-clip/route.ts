@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import LumaAI from 'lumaai';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -56,8 +55,8 @@ async function uploadToImgBB(
 }
 
 export async function POST(req: Request) {
-  const lumaKey = process.env.LUMAAI_API_KEY;
-  const imgbbKey = process.env.IMGBB_API_KEY;
+  const lumaKey = process.env.LUMAAI_API_KEY?.trim();
+  const imgbbKey = process.env.IMGBB_API_KEY?.trim();
   if (!lumaKey) {
     return NextResponse.json(
       { error: 'LUMAAI_API_KEY가 설정되지 않았습니다.' },
@@ -89,20 +88,45 @@ export async function POST(req: Request) {
     // 1) 이미지를 ImgBB에 업로드해 공개 URL 확보 (10분 후 자동 삭제)
     const imageUrl = await uploadToImgBB(imgbbKey, body.imageBase64, 600);
 
-    // 2) Luma Dream Machine API로 영상 생성 요청
-    const client = new LumaAI({ authToken: lumaKey });
-    const generation = await client.generations.create({
-      prompt: buildPrompt(body.cornerHint, body.prompt),
-      model: 'ray-2',
-      resolution: '720p',
-      duration: '5s',
-      keyframes: {
-        frame0: {
-          type: 'image',
-          url: imageUrl,
+    // 2) Luma Dream Machine API 직접 호출 (SDK 우회로 정확한 에러 노출)
+    const lumaRes = await fetch(
+      'https://api.lumalabs.ai/dream-machine/v1/generations',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${lumaKey}`,
+          'Content-Type': 'application/json',
         },
+        body: JSON.stringify({
+          prompt: buildPrompt(body.cornerHint, body.prompt),
+          model: 'ray-2',
+          resolution: '720p',
+          duration: '5s',
+          keyframes: {
+            frame0: { type: 'image', url: imageUrl },
+          },
+        }),
       },
-    });
+    );
+
+    if (!lumaRes.ok) {
+      const errText = await lumaRes.text();
+      console.error('[Luma] non-ok', lumaRes.status, errText);
+      // 키 디버그 힌트 — 앞 13자리/뒤 4자리/길이만 노출
+      const keyHint =
+        lumaKey.length > 20
+          ? `${lumaKey.slice(0, 13)}...${lumaKey.slice(-4)} (len=${lumaKey.length})`
+          : `(len=${lumaKey.length})`;
+      return NextResponse.json(
+        {
+          error: `Luma API (${lumaRes.status}): ${errText.slice(0, 200)}`,
+          keyHint,
+        },
+        { status: 502 },
+      );
+    }
+
+    const generation = (await lumaRes.json()) as { id: string };
 
     return NextResponse.json({
       generationId: generation.id,

@@ -238,8 +238,12 @@ export default function VideoMakerPage() {
         body: JSON.stringify({ imageBase64: base64, mediaType, cornerHint }),
       });
       if (!startRes.ok) {
-        const data = await startRes.json().catch(() => ({}));
-        throw new Error(data.error || `드론 생성 시작 실패 (${startRes.status})`);
+        const data = (await startRes.json().catch(() => ({}))) as {
+          error?: string;
+          keyHint?: string;
+        };
+        const base = data.error || `드론 생성 시작 실패 (${startRes.status})`;
+        throw new Error(data.keyHint ? `${base} [key=${data.keyHint}]` : base);
       }
       const { generationId } = (await startRes.json()) as {
         generationId: string;

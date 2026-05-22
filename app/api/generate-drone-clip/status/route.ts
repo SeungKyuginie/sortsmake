@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server';
-import LumaAI from 'lumaai';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
 
 export async function GET(req: Request) {
-  const lumaKey = process.env.LUMAAI_API_KEY;
+  const lumaKey = process.env.LUMAAI_API_KEY?.trim();
   if (!lumaKey) {
     return NextResponse.json(
       { error: 'LUMAAI_API_KEY가 설정되지 않았습니다.' },
@@ -23,19 +22,34 @@ export async function GET(req: Request) {
   }
 
   try {
-    const client = new LumaAI({ authToken: lumaKey });
-    const gen = await client.generations.get(id);
+    const res = await fetch(
+      `https://api.lumalabs.ai/dream-machine/v1/generations/${encodeURIComponent(id)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${lumaKey}`,
+        },
+      },
+    );
+    if (!res.ok) {
+      const errText = await res.text();
+      return NextResponse.json(
+        { error: `Luma API (${res.status}): ${errText.slice(0, 200)}` },
+        { status: 502 },
+      );
+    }
 
-    // state: queued | dreaming | completed | failed
-    const state = gen.state ?? 'queued';
-    const videoUrl = gen.assets?.video ?? null;
-    const failureReason = gen.failure_reason ?? null;
+    const gen = (await res.json()) as {
+      id: string;
+      state?: string;
+      assets?: { video?: string };
+      failure_reason?: string;
+    };
 
     return NextResponse.json({
       id: gen.id,
-      state,
-      videoUrl,
-      failureReason,
+      state: gen.state ?? 'queued',
+      videoUrl: gen.assets?.video ?? null,
+      failureReason: gen.failure_reason ?? null,
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Luma 상태 조회 실패';
