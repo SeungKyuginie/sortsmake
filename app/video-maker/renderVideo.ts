@@ -166,12 +166,10 @@ function buildItemChain(idx: number, T: number, isVideo: boolean, droneShot = fa
   }
 
   if (droneShot) {
-    // 드론샷(항공): 1.6x → 1.0x 강한 풀백 + 좌→우 드리프트 (드론이 극적으로 멀어지는 느낌)
+    // 드론샷(항공): 1.6x → 1.0x 강한 줌아웃만 (드리프트 없음 → 부드러움)
     const droneFrames = Math.max(2, Math.round(T * FPS));
     const wOver = Math.round(WIDTH * 1.6);
     const hOver = Math.round(HEIGHT * 1.6);
-    const xExpr = `iw/2-(iw/zoom/2)+iw*0.04*(on/${droneFrames}-0.5)`;
-    const yExpr = `ih/2-(ih/zoom/2)`;
 
     return (
       `[${idx}:v]split=2[bg${idx}][fg${idx}];` +
@@ -182,7 +180,7 @@ function buildItemChain(idx: number, T: number, isVideo: boolean, droneShot = fa
       `scale=${wOver}:${hOver},setsar=1,` +
       `trim=end_frame=1,setpts=PTS-STARTPTS,` +
       `zoompan=z='if(eq(on,1),1.6,max(1.0,zoom-${(0.6 / (droneFrames - 1)).toFixed(6)}))':` +
-      `x='${xExpr}':y='${yExpr}':` +
+      `x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':` +
       `d=${droneFrames}:s=${WIDTH}x${HEIGHT}:fps=${FPS}[fgX${idx}];` +
       `[bgX${idx}][fgX${idx}]overlay=(W-w)/2:(H-h)/2,` +
       `fps=${FPS},format=yuv420p,setpts=PTS-STARTPTS[v${idx}]`
