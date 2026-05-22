@@ -4,10 +4,10 @@ export const runtime = 'nodejs';
 export const maxDuration = 30;
 
 export async function GET(req: Request) {
-  const lumaKey = process.env.LUMAAI_API_KEY?.trim();
-  if (!lumaKey) {
+  const replicateToken = process.env.REPLICATE_API_TOKEN?.trim();
+  if (!replicateToken) {
     return NextResponse.json(
-      { error: 'LUMAAI_API_KEY가 설정되지 않았습니다.' },
+      { error: 'REPLICATE_API_TOKEN이 설정되지 않았습니다.' },
       { status: 500 },
     );
   }
@@ -16,44 +16,57 @@ export async function GET(req: Request) {
   const id = searchParams.get('id');
   if (!id) {
     return NextResponse.json(
-      { error: 'generation id 가 필요합니다.' },
+      { error: 'prediction id 가 필요합니다.' },
       { status: 400 },
     );
   }
 
   try {
     const res = await fetch(
-      `https://agents.lumalabs.ai/v1/generations/${encodeURIComponent(id)}`,
+      `https://api.replicate.com/v1/predictions/${encodeURIComponent(id)}`,
       {
         headers: {
-          Authorization: `Bearer ${lumaKey}`,
-          Accept: 'application/json',
+          Authorization: `Token ${replicateToken}`,
         },
       },
     );
     if (!res.ok) {
       const errText = await res.text();
       return NextResponse.json(
-        { error: `Luma API (${res.status}): ${errText.slice(0, 200)}` },
+        { error: `Replicate API (${res.status}): ${errText.slice(0, 200)}` },
         { status: 502 },
       );
     }
 
-    const gen = (await res.json()) as {
+    const pred = (await res.json()) as {
       id: string;
-      state?: string;
-      assets?: { video?: string };
-      failure_reason?: string;
+      status: string; // starting | processing | succeeded | failed | canceled
+      output?: string | string[] | null;
+      error?: string | null;
     };
 
+    // Replicate status → Luma-style state로 매핑 (클라이언트 코드 호환)
+    const stateMap: Record<string, string> = {
+      starting: 'queued',
+      processing: 'dreaming',
+      succeeded: 'completed',
+      failed: 'failed',
+      canceled: 'failed',
+    };
+    const state = stateMap[pred.status] ?? 'queued';
+
+    // 출력은 string 또는 string[] 일 수 있음 — 첫 번째 URL 사용
+    const output = pred.output;
+    const videoUrl = Array.isArray(output) ? output[0] : output ?? null;
+
     return NextResponse.json({
-      id: gen.id,
-      state: gen.state ?? 'queued',
-      videoUrl: gen.assets?.video ?? null,
-      failureReason: gen.failure_reason ?? null,
+      id: pred.id,
+      state,
+      videoUrl,
+      failureReason: pred.error ?? null,
     });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Luma 상태 조회 실패';
+    const msg = err instanceof Error ? err.message : 'Replicate 상태 조회 실패';
     return NextResponse.json({ error: msg }, { status: 502 });
   }
 }

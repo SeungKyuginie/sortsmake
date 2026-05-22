@@ -10,18 +10,19 @@ type RequestBody = {
   cornerHint?: string;
 };
 
+// Replicate에서 사용할 image-to-video 모델.
+// minimax/video-01: 이미지 + 프롬프트 → 6초 비디오, $0.30/clip, 안정적
+const REPLICATE_MODEL = 'minimax/video-01';
+
 function buildPrompt(cornerHint?: string, override?: string): string {
   if (override?.trim()) return override.trim();
   const subject = cornerHint?.trim() || 'fresh products on a grocery store display';
   return (
-    `Cinematic drone shot, slow aerial pull-back ascending above ${subject}. ` +
-    `Smooth gimbal motion, no shake, wide angle. Bright clean lighting, ` +
-    `vibrant colors, retail showcase. The camera glides slowly upward and back, ` +
-    `revealing more of the scene. Photorealistic, 4K, professional cinematography.`
+    `Cinematic aerial drone shot, slow pull-back ascending above ${subject}. ` +
+    `Smooth gimbal motion, no shake, wide angle. Bright clean lighting, vibrant colors.`
   );
 }
 
-// ImgBB에 이미지를 업로드해 공개 URL 확보. expiration 초 후 자동 삭제.
 async function uploadToImgBB(
   apiKey: string,
   base64: string,
@@ -55,11 +56,11 @@ async function uploadToImgBB(
 }
 
 export async function POST(req: Request) {
-  const lumaKey = process.env.LUMAAI_API_KEY?.trim();
+  const replicateToken = process.env.REPLICATE_API_TOKEN?.trim();
   const imgbbKey = process.env.IMGBB_API_KEY?.trim();
-  if (!lumaKey) {
+  if (!replicateToken) {
     return NextResponse.json(
-      { error: 'LUMAAI_API_KEY가 설정되지 않았습니다.' },
+      { error: 'REPLICATE_API_TOKEN이 설정되지 않았습니다.' },
       { status: 500 },
     );
   }
@@ -85,57 +86,48 @@ export async function POST(req: Request) {
   }
 
   try {
-    // 1) 이미지를 ImgBB에 업로드해 공개 URL 확보 (10분 후 자동 삭제)
+    // 1) 이미지 → ImgBB 공개 URL
     const imageUrl = await uploadToImgBB(imgbbKey, body.imageBase64, 600);
 
-    // 2) Luma 새 API (agents.lumalabs.ai) 호출 — 마이그레이션 후 엔드포인트
-    const lumaRes = await fetch(
-      'https://agents.lumalabs.ai/v1/generations',
+    // 2) Replicate API 호출
+    const res = await fetch(
+      `https://api.replicate.com/v1/models/${REPLICATE_MODEL}/predictions`,
       {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${lumaKey}`,
+          Authorization: `Token ${replicateToken}`,
           'Content-Type': 'application/json',
-          Accept: 'application/json',
+          Prefer: 'wait=0', // async — 즉시 prediction id 반환
         },
         body: JSON.stringify({
-          prompt: buildPrompt(body.cornerHint, body.prompt),
-          model: 'uni-1',
-          type: 'video',
-          aspect_ratio: '9:16', // 숏츠용 세로 비율
-          duration: '5s',
-          resolution: '720p',
-          keyframes: {
-            frame0: { type: 'image', url: imageUrl },
+          input: {
+            prompt: buildPrompt(body.cornerHint, body.prompt),
+            first_frame_image: imageUrl,
           },
         }),
       },
     );
 
-    if (!lumaRes.ok) {
-      const errText = await lumaRes.text();
-      console.error('[Luma] non-ok', lumaRes.status, errText);
-      // 키 디버그 힌트 — 앞 13자리/뒤 4자리/길이만 노출
-      const keyHint =
-        lumaKey.length > 20
-          ? `${lumaKey.slice(0, 13)}...${lumaKey.slice(-4)} (len=${lumaKey.length})`
-          : `(len=${lumaKey.length})`;
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error('[Replicate] non-ok', res.status, errText);
       return NextResponse.json(
-        {
-          error: `Luma API (${lumaRes.status}): ${errText.slice(0, 200)}`,
-          keyHint,
-        },
+        { error: `Replicate API (${res.status}): ${errText.slice(0, 300)}` },
         { status: 502 },
       );
     }
 
-    const generation = (await lumaRes.json()) as { id: string };
+    const prediction = (await res.json()) as {
+      id: string;
+      status: string;
+      urls?: { get?: string };
+    };
 
     return NextResponse.json({
-      generationId: generation.id,
+      generationId: prediction.id,
     });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Luma API 호출 실패';
+    const msg = err instanceof Error ? err.message : 'Replicate API 호출 실패';
     return NextResponse.json({ error: msg }, { status: 502 });
   }
 }
