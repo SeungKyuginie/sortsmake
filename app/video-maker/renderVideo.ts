@@ -147,9 +147,9 @@ function drawTextNode(opts: DrawTextOpts): string {
 }
 
 // 한 항목용 비디오 체인 — 절대 시간 정확히 T초, 1080×1920 yuv420p 출력.
-// 이미지: 블러 커버 BG + 컨테인 FG + 미세한 sine pan (켄 번스 느낌).
-// 이미지(드론샷): 블러 커버 BG + 1.3x 줌아웃 FG (풀백 효과).
-// 비디오: 블러 커버 BG + 컨테인 FG (원본 모션 보존, 추가 카메라 모션 없음).
+// 이미지: 블러 커버 BG + 컨테인 FG + 한 방향 선형 드리프트 (어지럽지 않은 글라이드).
+// 이미지(드론샷): 블러 커버 BG + 1.3x → 1.0x 풀백 줌아웃 + 미세 드리프트.
+// 비디오: 블러 커버 BG + 컨테인 FG (원본 모션 보존).
 function buildItemChain(idx: number, T: number, isVideo: boolean, droneShot = false): string {
   const Tstr = T.toFixed(3);
 
@@ -166,13 +166,10 @@ function buildItemChain(idx: number, T: number, isVideo: boolean, droneShot = fa
   }
 
   if (droneShot) {
-    // 드론샷(항공): 1.3x → 1.0x 줌아웃 + 좌→우 미세 드리프트 (드론 상승 + 글라이드)
+    // 드론샷(항공): 1.3x → 1.0x 줌아웃, 드리프트 없음 (어지러움 방지)
     const droneFrames = Math.max(2, Math.round(T * FPS));
     const wOver = Math.round(WIDTH * 1.3);
     const hOver = Math.round(HEIGHT * 1.3);
-    // x 위치: 시작 시 약간 왼쪽으로 치우쳤다가 중앙으로 — 드론이 옆으로 미끄러지듯 이동
-    const xExpr = `iw/2-(iw/zoom/2)+iw*0.03*(on/${droneFrames}-0.5)`;
-    const yExpr = `ih/2-(ih/zoom/2)`;
 
     return (
       `[${idx}:v]split=2[bg${idx}][fg${idx}];` +
@@ -183,21 +180,23 @@ function buildItemChain(idx: number, T: number, isVideo: boolean, droneShot = fa
       `scale=${wOver}:${hOver},setsar=1,` +
       `trim=end_frame=1,setpts=PTS-STARTPTS,` +
       `zoompan=z='if(eq(on,1),1.3,max(1.0,zoom-${(0.3 / (droneFrames - 1)).toFixed(6)}))':` +
-      `x='${xExpr}':y='${yExpr}':` +
+      `x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':` +
       `d=${droneFrames}:s=${WIDTH}x${HEIGHT}:fps=${FPS}[fgX${idx}];` +
       `[bgX${idx}][fgX${idx}]overlay=(W-w)/2:(H-h)/2,` +
       `fps=${FPS},format=yuv420p,setpts=PTS-STARTPTS[v${idx}]`
     );
   }
 
-  // 이미지: 블러 BG + 컨테인 FG + 미세 sine 모션
-  // FG에 가벼운 켄 번스: scale up ~12% 후 crop with time-varying offset.
-  const overscan = 1.12;
+  // 기본 이미지: 매우 부드러운 일방향 드리프트 (sine 진동 없음 → 어지럽지 않음)
+  // FG를 1.08x로 확대해 가장자리 여유 확보, x를 클립 길이 동안 천천히 좌→우로만 이동
+  const overscan = 1.08;
   const wFg = Math.round(WIDTH * overscan);
   const hFg = Math.round(HEIGHT * overscan);
-  // 좌우 ±4% 진폭의 sine + 상하 ±2% 진폭의 sine으로 부드러운 패닝
-  const xExpr = `(in_w-${WIDTH})/2 + ${WIDTH}*0.035*sin(t*PI/${Tstr})`;
-  const yExpr = `(in_h-${HEIGHT})/2 - ${HEIGHT}*0.018*sin(t*PI/${Tstr})`;
+  // 드리프트 폭: ±1.5% 만 — 거의 인지 안 되는 수준
+  // 짝수 인덱스는 좌→우, 홀수는 우→좌로 교차하여 단조롭지 않게 (idx 의존)
+  const dir = idx % 2 === 0 ? 1 : -1;
+  const xExpr = `(in_w-${WIDTH})/2 + ${WIDTH}*0.015*${dir}*(t/${Tstr}-0.5)`;
+  const yExpr = `(in_h-${HEIGHT})/2`;
 
   return (
     `[${idx}:v]split=2[bg${idx}][fg${idx}];` +
