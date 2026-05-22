@@ -170,7 +170,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ script: text });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Claude API 호출 실패';
+    const msg = err instanceof Error ? err.message : '스크립트 생성 실패';
     return NextResponse.json({ error: msg }, { status: 502 });
   }
 }
