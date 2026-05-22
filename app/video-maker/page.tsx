@@ -212,7 +212,7 @@ export default function VideoMakerPage() {
     });
   };
 
-  // AI 드론샷 영상 생성 (Hugging Face SVD)
+  // AI 드론샷 영상 생성 (Luma Dream Machine)
   const onGenerateDrone = async (id: string) => {
     const target = photos.find((p) => p.id === id);
     if (!target || target.kind !== 'image') return;
@@ -227,22 +227,67 @@ export default function VideoMakerPage() {
 
     try {
       const { base64, mediaType } = await encodeImageForClaude(target.file);
-      const res = await fetch('/api/generate-drone-clip', {
+      const cornerHint = [target.cornerName, target.description]
+        .filter(Boolean)
+        .join(' / ');
+
+      // 1) 생성 시작
+      const startRes = await fetch('/api/generate-drone-clip', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageBase64: base64, mediaType }),
+        body: JSON.stringify({ imageBase64: base64, mediaType, cornerHint }),
       });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || `AI 드론 생성 실패 (${res.status})`);
+      if (!startRes.ok) {
+        const data = await startRes.json().catch(() => ({}));
+        throw new Error(data.error || `드론 생성 시작 실패 (${startRes.status})`);
       }
-      const videoBlob = await res.blob();
+      const { generationId } = (await startRes.json()) as {
+        generationId: string;
+      };
+
+      // 2) 폴링 — Luma는 30~90초 정도 걸림. 5초 간격으로 최대 3분.
+      const maxAttempts = 36;
+      const intervalMs = 5000;
+      let videoUrl: string | null = null;
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        await new Promise((r) => setTimeout(r, intervalMs));
+        const statusRes = await fetch(
+          `/api/generate-drone-clip/status?id=${encodeURIComponent(generationId)}`,
+        );
+        if (!statusRes.ok) {
+          const data = await statusRes.json().catch(() => ({}));
+          throw new Error(data.error || `상태 조회 실패 (${statusRes.status})`);
+        }
+        const status = (await statusRes.json()) as {
+          state: string;
+          videoUrl: string | null;
+          failureReason: string | null;
+        };
+        if (status.state === 'completed' && status.videoUrl) {
+          videoUrl = status.videoUrl;
+          break;
+        }
+        if (status.state === 'failed') {
+          throw new Error(status.failureReason || 'Luma 생성 실패');
+        }
+        // queued / dreaming 이면 계속 대기
+      }
+
+      if (!videoUrl) {
+        throw new Error('생성 시간 초과 (3분). 다시 시도해 주세요.');
+      }
+
+      // 3) Luma가 제공한 URL에서 영상 다운로드
+      const videoRes = await fetch(videoUrl);
+      if (!videoRes.ok)
+        throw new Error(`영상 다운로드 실패 (${videoRes.status})`);
+      const videoBlob = await videoRes.blob();
       const videoFile = new File(
         [videoBlob],
         `drone-${target.id}-${Date.now()}.mp4`,
         { type: 'video/mp4' },
       );
-      const videoUrl = URL.createObjectURL(videoFile);
+      const localUrl = URL.createObjectURL(videoFile);
 
       setPhotos((p) =>
         p.map((x) =>
@@ -253,7 +298,7 @@ export default function VideoMakerPage() {
                 originalPreviewUrl: x.originalPreviewUrl ?? x.previewUrl,
                 originalKind: x.originalKind ?? x.kind,
                 file: videoFile,
-                previewUrl: videoUrl,
+                previewUrl: localUrl,
                 kind: 'video',
                 droneShot: true,
                 droneAiStatus: 'ready',
