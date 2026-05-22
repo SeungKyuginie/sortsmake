@@ -166,10 +166,12 @@ function buildItemChain(idx: number, T: number, isVideo: boolean, droneShot = fa
   }
 
   if (droneShot) {
-    // 드론샷(항공): 1.3x → 1.0x 줌아웃, 드리프트 없음 (어지러움 방지)
+    // 드론샷(항공): 1.3x → 1.0x 줌아웃 + 좌→우 미세 드리프트 (드론 상승 + 글라이드)
     const droneFrames = Math.max(2, Math.round(T * FPS));
     const wOver = Math.round(WIDTH * 1.3);
     const hOver = Math.round(HEIGHT * 1.3);
+    const xExpr = `iw/2-(iw/zoom/2)+iw*0.03*(on/${droneFrames}-0.5)`;
+    const yExpr = `ih/2-(ih/zoom/2)`;
 
     return (
       `[${idx}:v]split=2[bg${idx}][fg${idx}];` +
@@ -180,30 +182,31 @@ function buildItemChain(idx: number, T: number, isVideo: boolean, droneShot = fa
       `scale=${wOver}:${hOver},setsar=1,` +
       `trim=end_frame=1,setpts=PTS-STARTPTS,` +
       `zoompan=z='if(eq(on,1),1.3,max(1.0,zoom-${(0.3 / (droneFrames - 1)).toFixed(6)}))':` +
-      `x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':` +
+      `x='${xExpr}':y='${yExpr}':` +
       `d=${droneFrames}:s=${WIDTH}x${HEIGHT}:fps=${FPS}[fgX${idx}];` +
       `[bgX${idx}][fgX${idx}]overlay=(W-w)/2:(H-h)/2,` +
       `fps=${FPS},format=yuv420p,setpts=PTS-STARTPTS[v${idx}]`
     );
   }
 
-  // 기본 이미지: 매우 부드러운 일방향 드리프트 (sine 진동 없음 → 어지럽지 않음)
-  // FG를 1.08x로 확대해 가장자리 여유 확보, x를 클립 길이 동안 천천히 좌→우로만 이동
-  const overscan = 1.08;
-  const wFg = Math.round(WIDTH * overscan);
-  const hFg = Math.round(HEIGHT * overscan);
-  // 드리프트 폭: ±1.5% 만 — 거의 인지 안 되는 수준
-  // 짝수 인덱스는 좌→우, 홀수는 우→좌로 교차하여 단조롭지 않게 (idx 의존)
-  const dir = idx % 2 === 0 ? 1 : -1;
-  const xExpr = `(in_w-${WIDTH})/2 + ${WIDTH}*0.015*${dir}*(t/${Tstr}-0.5)`;
-  const yExpr = `(in_h-${HEIGHT})/2`;
+  // 기본 이미지: 부드러운 슬로우 줌인 (1.0 → 1.05, push-in 영화 효과)
+  // crop 정수 픽셀 문제 회피 — zoompan은 서브픽셀 정밀도로 매끄럽게 처리.
+  const imgFrames = Math.max(2, Math.round(T * FPS));
+  const wOver = Math.round(WIDTH * 1.1);
+  const hOver = Math.round(HEIGHT * 1.1);
 
   return (
     `[${idx}:v]split=2[bg${idx}][fg${idx}];` +
     `[bg${idx}]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,` +
     `crop=${WIDTH}:${HEIGHT},boxblur=24:4,setsar=1[bgX${idx}];` +
-    `[fg${idx}]scale=${wFg}:${hFg}:force_original_aspect_ratio=increase,` +
-    `crop=${WIDTH}:${HEIGHT}:'${xExpr}':'${yExpr}',setsar=1[fgX${idx}];` +
+    // FG: 1080x1920 컨테인 + 패드 → 1.1x 확대 → 1프레임만 골라 zoompan 줌인
+    `[fg${idx}]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=decrease,` +
+    `pad=${WIDTH}:${HEIGHT}:(ow-iw)/2:(oh-ih)/2,` +
+    `scale=${wOver}:${hOver},setsar=1,` +
+    `trim=end_frame=1,setpts=PTS-STARTPTS,` +
+    `zoompan=z='min(1.05,1.0+${(0.05 / (imgFrames - 1)).toFixed(6)}*on)':` +
+    `x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':` +
+    `d=${imgFrames}:s=${WIDTH}x${HEIGHT}:fps=${FPS}[fgX${idx}];` +
     `[bgX${idx}][fgX${idx}]overlay=(W-w)/2:(H-h)/2,` +
     `fps=${FPS},format=yuv420p,setpts=PTS-STARTPTS[v${idx}]`
   );
