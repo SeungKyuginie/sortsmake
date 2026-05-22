@@ -82,6 +82,20 @@ export function PhotoUploader({
                       #{idx + 1} {p.kind === 'video' ? '🎬 영상' : '🖼 사진'}
                     </span>
                     <div className="flex items-center gap-1">
+                      {p.kind === 'image' && (
+                        <button
+                          type="button"
+                          title="드론샷 효과: 클로즈업에서 서서히 줌아웃"
+                          className={`px-2 py-1 text-xs rounded border font-medium transition-colors ${
+                            p.droneShot
+                              ? 'bg-sky-500 text-white border-sky-500'
+                              : 'btn-secondary'
+                          }`}
+                          onClick={() => onUpdate(p.id, { droneShot: !p.droneShot })}
+                        >
+                          🚁 드론
+                        </button>
+                      )}
                       <button
                         type="button"
                         className="btn-secondary px-2 py-1 text-xs"

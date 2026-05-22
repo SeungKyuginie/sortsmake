@@ -312,6 +312,7 @@ export default function VideoMakerPage() {
           captions: photos.map((p) =>
             [p.cornerName, p.description].filter(Boolean).join(' · '),
           ),
+          droneShots: photos.map((p) => p.droneShot ?? false),
           audio: audioBlob,
           audioDurationSec: audioDuration,
           perItemDurations:

@@ -17,6 +17,7 @@ export type RenderItem = {
 export type RenderInput = {
   items: RenderItem[];
   captions: string[]; // per-item caption (optional, may be empty strings)
+  droneShots?: boolean[]; // per-item drone shot flag (images only)
   audio: Blob;
   audioDurationSec: number;
   // 코너별 음성 길이(초). 항목 수와 맞아야 하고, 합 == audioDurationSec.
@@ -65,27 +66,40 @@ function buildFilterGraph(
   items: RenderItem[],
   itemDurations: number[],
   captions: string[],
+  droneShots?: boolean[],
 ): string {
   const segments: string[] = [];
   for (let i = 0; i < items.length; i++) {
     const T = itemDurations[i];
     const caption = sanitizeCaption(captions[i] ?? '');
     const isVideo = items[i].kind === 'video';
+    const isDrone = !isVideo && (droneShots?.[i] ?? false);
+    const frames = Math.max(2, Math.round(T * FPS));
+
     const base =
       `[${i}:v]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=decrease,` +
-      `pad=${WIDTH}:${HEIGHT}:(ow-iw)/2:(oh-ih)/2:color=black,` +
-      `setsar=1,fps=${FPS},format=yuv420p`;
+      `pad=${WIDTH}:${HEIGHT}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1`;
+
+    // Drone shot: slow zoom-out from 1.3x to 1.0x (pull-back effect)
+    const droneFilter = isDrone
+      ? `,zoompan=z='max(1.0\\,1.3-0.3*on/${frames})':` +
+        `x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':` +
+        `d=${frames}:s=${WIDTH}x${HEIGHT}:fps=${FPS}`
+      : `,fps=${FPS}`;
+
     // Videos: ensure exactly T seconds (pad last frame, trim). Images are looped
     // via -loop 1 -t T input flag, so they already produce T-second streams.
     const lengthFix = isVideo
       ? `,tpad=stop_mode=clone:stop_duration=${T.toFixed(3)},` +
         `trim=duration=${T.toFixed(3)},setpts=PTS-STARTPTS`
       : '';
+
+    const formatted = `${base}${droneFilter}${lengthFix},format=yuv420p`;
     const withText = caption
-      ? `${base}${lengthFix},drawtext=text='${caption}':fontcolor=white:fontsize=64:` +
+      ? `${formatted},drawtext=text='${caption}':fontcolor=white:fontsize=64:` +
         `box=1:boxcolor=black@0.55:boxborderw=24:` +
         `x=(w-text_w)/2:y=h-380`
-      : `${base}${lengthFix}`;
+      : formatted;
     segments.push(`${withText}[v${i}]`);
   }
 
@@ -120,6 +134,7 @@ export async function renderVideo(
   const {
     items,
     captions,
+    droneShots,
     audio,
     audioDurationSec,
     perItemDurations,
@@ -188,7 +203,7 @@ export async function renderVideo(
   }
 
   onProgress({ ratio: 0.18, message: '필터 그래프 구성 중…' });
-  const videoFilter = buildFilterGraph(items, itemDurations, captions);
+  const videoFilter = buildFilterGraph(items, itemDurations, captions, droneShots);
 
   const voiceIdx = items.length;
   const bgmIdx = items.length + 1;
