@@ -166,22 +166,24 @@ function buildItemChain(idx: number, T: number, isVideo: boolean, droneShot = fa
   }
 
   if (droneShot) {
-    // 드론샷: zoompan으로 1.3x → 1.0x 풀백 (드론이 뒤로 빠지는 느낌)
+    // 드론샷(항공): 1.3x → 1.0x 줌아웃 + 좌→우 미세 드리프트 (드론 상승 + 글라이드)
     const droneFrames = Math.max(2, Math.round(T * FPS));
     const wOver = Math.round(WIDTH * 1.3);
     const hOver = Math.round(HEIGHT * 1.3);
+    // x 위치: 시작 시 약간 왼쪽으로 치우쳤다가 중앙으로 — 드론이 옆으로 미끄러지듯 이동
+    const xExpr = `iw/2-(iw/zoom/2)+iw*0.03*(on/${droneFrames}-0.5)`;
+    const yExpr = `ih/2-(ih/zoom/2)`;
 
     return (
       `[${idx}:v]split=2[bg${idx}][fg${idx}];` +
       `[bg${idx}]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,` +
       `crop=${WIDTH}:${HEIGHT},boxblur=24:4,setsar=1[bgX${idx}];` +
-      // FG: 1080x1920 컨테인 + 검은 패드 → 확대 → 1프레임만 골라 zoompan으로 줌아웃
       `[fg${idx}]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=decrease,` +
       `pad=${WIDTH}:${HEIGHT}:(ow-iw)/2:(oh-ih)/2,` +
       `scale=${wOver}:${hOver},setsar=1,` +
       `trim=end_frame=1,setpts=PTS-STARTPTS,` +
       `zoompan=z='if(eq(on,1),1.3,max(1.0,zoom-${(0.3 / (droneFrames - 1)).toFixed(6)}))':` +
-      `x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':` +
+      `x='${xExpr}':y='${yExpr}':` +
       `d=${droneFrames}:s=${WIDTH}x${HEIGHT}:fps=${FPS}[fgX${idx}];` +
       `[bgX${idx}][fgX${idx}]overlay=(W-w)/2:(H-h)/2,` +
       `fps=${FPS},format=yuv420p,setpts=PTS-STARTPTS[v${idx}]`

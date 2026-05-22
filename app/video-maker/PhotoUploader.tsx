@@ -85,7 +85,7 @@ export function PhotoUploader({
                       {p.kind === 'image' && (
                         <button
                           type="button"
-                          title="드론샷: 클로즈업에서 서서히 줌아웃"
+                          title="드론샷: 위에서 내려다본 사진(매대/진열대 탑뷰)에 줌아웃+드리프트 적용"
                           className={`px-2 py-1 text-xs rounded border font-medium transition-colors ${
                             p.droneShot
                               ? 'bg-sky-500 text-white border-sky-500'
