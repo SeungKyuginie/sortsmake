@@ -166,7 +166,7 @@ function buildItemChain(idx: number, T: number, isVideo: boolean, droneShot = fa
   }
 
   if (droneShot) {
-    // 드론샷(항공): 1.6x → 1.0x 강한 줌아웃만 (드리프트 없음 → 부드러움)
+    // 드론샷: 건드리지 말 것 (사용자 지시)
     const droneFrames = Math.max(2, Math.round(T * FPS));
     const wOver = Math.round(WIDTH * 1.6);
     const hOver = Math.round(HEIGHT * 1.6);
@@ -187,23 +187,24 @@ function buildItemChain(idx: number, T: number, isVideo: boolean, droneShot = fa
     );
   }
 
-  // 기본 이미지: cover 모드(검은 띠 없음)로 전체 화면 채우고 슬로우 줌인.
-  const imgFrames = Math.max(2, Math.round(T * FPS));
-  const wOver = Math.round(WIDTH * 1.15);
-  const hOver = Math.round(HEIGHT * 1.15);
+  // 기본 이미지: 줌 없이 순수 좌우 패닝만 (한 방향 글라이드, 매끄러움)
+  // cover 모드로 전체 화면 채우고 1.2x 프리스케일 → 좌우 폭만큼 천천히 이동.
+  const wPre = Math.round(WIDTH * 1.2);
+  const hPre = Math.round(HEIGHT * 1.2);
+  // 짝수 인덱스 좌→우, 홀수 우→좌 (단조롭지 않게)
+  const dir = idx % 2 === 0 ? 1 : -1;
+  // 패닝 폭 ±7.5% (총 15%) — 매끄러우면서 적당히 인지 가능
+  const xExpr = `(in_w-${WIDTH})/2 + ${WIDTH}*0.075*${dir}*(2*t/${Tstr}-1)`;
+  const yExpr = `(in_h-${HEIGHT})/2`;
 
   return (
     `[${idx}:v]split=2[bg${idx}][fg${idx}];` +
     `[bg${idx}]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,` +
     `crop=${WIDTH}:${HEIGHT},boxblur=24:4,setsar=1[bgX${idx}];` +
-    // FG: cover 모드 → 1.15x 프리스케일 → zoompan 슬로우 줌인 → 전체 화면 출력
-    `[fg${idx}]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,` +
-    `crop=${WIDTH}:${HEIGHT},` +
-    `scale=${wOver}:${hOver},setsar=1,` +
-    `trim=end_frame=1,setpts=PTS-STARTPTS,` +
-    `zoompan=z='min(1.10,1.0+${(0.10 / (imgFrames - 1)).toFixed(6)}*on)':` +
-    `x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':` +
-    `d=${imgFrames}:s=${WIDTH}x${HEIGHT}:fps=${FPS}[fgX${idx}];` +
+    // FG: cover 모드 → 1.2x 프리스케일 → 좌우 패닝 crop
+    `[fg${idx}]scale=${wPre}:${hPre}:force_original_aspect_ratio=increase,` +
+    `crop=${wPre}:${hPre},setsar=1,` +
+    `crop=${WIDTH}:${HEIGHT}:'${xExpr}':'${yExpr}'[fgX${idx}];` +
     `[bgX${idx}][fgX${idx}]overlay=(W-w)/2:(H-h)/2,` +
     `fps=${FPS},format=yuv420p,setpts=PTS-STARTPTS[v${idx}]`
   );
