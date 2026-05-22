@@ -212,6 +212,94 @@ export default function VideoMakerPage() {
     });
   };
 
+  // AI 드론샷 영상 생성 (Hugging Face SVD)
+  const onGenerateDrone = async (id: string) => {
+    const target = photos.find((p) => p.id === id);
+    if (!target || target.kind !== 'image') return;
+
+    setPhotos((p) =>
+      p.map((x) =>
+        x.id === id
+          ? { ...x, droneAiStatus: 'generating', droneAiError: undefined }
+          : x,
+      ),
+    );
+
+    try {
+      const { base64, mediaType } = await encodeImageForClaude(target.file);
+      const res = await fetch('/api/generate-drone-clip', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageBase64: base64, mediaType }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `AI 드론 생성 실패 (${res.status})`);
+      }
+      const videoBlob = await res.blob();
+      const videoFile = new File(
+        [videoBlob],
+        `drone-${target.id}-${Date.now()}.mp4`,
+        { type: 'video/mp4' },
+      );
+      const videoUrl = URL.createObjectURL(videoFile);
+
+      setPhotos((p) =>
+        p.map((x) =>
+          x.id === id
+            ? {
+                ...x,
+                originalFile: x.originalFile ?? x.file,
+                originalPreviewUrl: x.originalPreviewUrl ?? x.previewUrl,
+                originalKind: x.originalKind ?? x.kind,
+                file: videoFile,
+                previewUrl: videoUrl,
+                kind: 'video',
+                droneShot: true,
+                droneAiStatus: 'ready',
+                droneAiError: undefined,
+              }
+            : x,
+        ),
+      );
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'AI 드론 생성 실패';
+      setPhotos((p) =>
+        p.map((x) =>
+          x.id === id
+            ? { ...x, droneAiStatus: 'error', droneAiError: msg }
+            : x,
+        ),
+      );
+    }
+  };
+
+  // AI 드론샷 취소 — 원본 사진으로 되돌리기
+  const onCancelDrone = (id: string) => {
+    setPhotos((p) =>
+      p.map((x) => {
+        if (x.id !== id) return x;
+        if (!x.originalFile || !x.originalPreviewUrl) return x;
+        // 현재 AI 영상 URL은 해제
+        if (x.previewUrl !== x.originalPreviewUrl) {
+          URL.revokeObjectURL(x.previewUrl);
+        }
+        return {
+          ...x,
+          file: x.originalFile,
+          previewUrl: x.originalPreviewUrl,
+          kind: x.originalKind ?? 'image',
+          droneShot: false,
+          droneAiStatus: 'idle',
+          droneAiError: undefined,
+          originalFile: undefined,
+          originalPreviewUrl: undefined,
+          originalKind: undefined,
+        };
+      }),
+    );
+  };
+
   const cornersReady = photos.length > 0;
 
   // ---------- Step 2: 스크립트 자동 생성 ----------
@@ -654,6 +742,8 @@ export default function VideoMakerPage() {
           onUpdate={onUpdate}
           onRemove={onRemove}
           onReorder={onReorder}
+          onGenerateDrone={onGenerateDrone}
+          onCancelDrone={onCancelDrone}
         />
       </section>
 

@@ -9,6 +9,8 @@ type Props = {
   onUpdate: (id: string, patch: Partial<CornerPhoto>) => void;
   onRemove: (id: string) => void;
   onReorder: (id: string, direction: -1 | 1) => void;
+  onGenerateDrone?: (id: string) => void;
+  onCancelDrone?: (id: string) => void;
 };
 
 export function PhotoUploader({
@@ -17,6 +19,8 @@ export function PhotoUploader({
   onUpdate,
   onRemove,
   onReorder,
+  onGenerateDrone,
+  onCancelDrone,
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -82,18 +86,31 @@ export function PhotoUploader({
                       #{idx + 1} {p.kind === 'video' ? '🎬 영상' : '🖼 사진'}
                     </span>
                     <div className="flex items-center gap-1">
-                      {p.kind === 'image' && (
+                      {p.kind === 'image' && p.droneAiStatus !== 'ready' && (
                         <button
                           type="button"
-                          title="드론샷: 위에서 내려다본 사진(매대/진열대 탑뷰)에 줌아웃+드리프트 적용"
+                          title="AI로 드론 항공샷 영상 생성 (Stable Video Diffusion)"
+                          disabled={p.droneAiStatus === 'generating'}
                           className={`px-2 py-1 text-xs rounded border font-medium transition-colors ${
-                            p.droneShot
-                              ? 'bg-sky-500 text-white border-sky-500'
+                            p.droneAiStatus === 'generating'
+                              ? 'bg-gray-200 text-gray-500 border-gray-300 cursor-wait'
                               : 'btn-secondary'
                           }`}
-                          onClick={() => onUpdate(p.id, { droneShot: !p.droneShot })}
+                          onClick={() => onGenerateDrone?.(p.id)}
                         >
-                          🚁 드론
+                          {p.droneAiStatus === 'generating'
+                            ? '🚁 생성 중…'
+                            : '🚁 AI 드론'}
+                        </button>
+                      )}
+                      {p.droneAiStatus === 'ready' && (
+                        <button
+                          type="button"
+                          title="원본 사진으로 되돌리기"
+                          className="px-2 py-1 text-xs rounded border font-medium bg-sky-500 text-white border-sky-500"
+                          onClick={() => onCancelDrone?.(p.id)}
+                        >
+                          🚁 AI 적용됨
                         </button>
                       )}
                       <button
@@ -143,6 +160,11 @@ export function PhotoUploader({
                       }
                     />
                   </div>
+                  {p.droneAiError ? (
+                    <div className="rounded-md bg-red-50 border border-red-200 p-2 text-xs text-red-700">
+                      AI 드론샷 실패: {p.droneAiError}
+                    </div>
+                  ) : null}
                 </div>
               </div>
             </li>

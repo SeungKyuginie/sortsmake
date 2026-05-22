@@ -6,6 +6,13 @@ export type CornerPhoto = {
   cornerName: string;
   description: string;
   droneShot?: boolean;
+  // AI 드론 영상 생성 상태
+  droneAiStatus?: 'idle' | 'generating' | 'ready' | 'error';
+  droneAiError?: string;
+  // AI가 생성한 영상으로 대체된 경우 원본 사진을 보관 (취소/재시도용)
+  originalFile?: File;
+  originalPreviewUrl?: string;
+  originalKind?: 'image' | 'video';
 };
 
 export type StepKey = 'upload' | 'script' | 'voice' | 'render' | 'done';
