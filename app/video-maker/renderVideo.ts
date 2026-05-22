@@ -41,6 +41,7 @@ export type RenderPhrase = {
 export type RenderInput = {
   items: RenderItem[];
   itemDurations: number[]; // sum === audioDurationSec
+  droneShots?: boolean[]; // per-item drone shot flag (images only)
   phrases: RenderPhrase[]; // 절대 시간 기준 자막 큐
   hookText: string;
   hookStart: number;
@@ -147,8 +148,9 @@ function drawTextNode(opts: DrawTextOpts): string {
 
 // 한 항목용 비디오 체인 — 절대 시간 정확히 T초, 1080×1920 yuv420p 출력.
 // 이미지: 블러 커버 BG + 컨테인 FG + 미세한 sine pan (켄 번스 느낌).
+// 이미지(드론샷): 블러 커버 BG + 1.3x 줌아웃 FG (풀백 효과).
 // 비디오: 블러 커버 BG + 컨테인 FG (원본 모션 보존, 추가 카메라 모션 없음).
-function buildItemChain(idx: number, T: number, isVideo: boolean): string {
+function buildItemChain(idx: number, T: number, isVideo: boolean, droneShot = false): string {
   const Tstr = T.toFixed(3);
 
   if (isVideo) {
@@ -160,6 +162,27 @@ function buildItemChain(idx: number, T: number, isVideo: boolean): string {
       `[bgX${idx}][fgX${idx}]overlay=(W-w)/2:(H-h)/2,` +
       `tpad=stop_mode=clone:stop_duration=${Tstr},trim=duration=${Tstr},setpts=PTS-STARTPTS,` +
       `fps=${FPS},format=yuv420p[v${idx}]`
+    );
+  }
+
+  if (droneShot) {
+    // 드론샷: 1.3x 확대에서 1.0x로 서서히 줌아웃 (풀백 효과)
+    const overscan = 1.3;
+    const wFg = Math.round(WIDTH * overscan);
+    const hFg = Math.round(HEIGHT * overscan);
+    // t=0: crop 중앙에서 overscan 크기 전체, t=T: 원본 크기로 줌아웃
+    const zoomExpr = `1.0 + ${overscan - 1.0} * (1 - t/${Tstr})`;
+    const xExpr = `(in_w - ${WIDTH}/${zoomExpr}) / 2`;
+    const yExpr = `(in_h - ${HEIGHT}/${zoomExpr}) / 2`;
+
+    return (
+      `[${idx}:v]split=2[bg${idx}][fg${idx}];` +
+      `[bg${idx}]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,` +
+      `crop=${WIDTH}:${HEIGHT},boxblur=24:4,setsar=1[bgX${idx}];` +
+      `[fg${idx}]scale=${wFg}:${hFg}:force_original_aspect_ratio=increase,` +
+      `crop=${WIDTH}:${HEIGHT}:'${xExpr}':'${yExpr}',setsar=1[fgX${idx}];` +
+      `[bgX${idx}][fgX${idx}]overlay=(W-w)/2:(H-h)/2,` +
+      `fps=${FPS},format=yuv420p,setpts=PTS-STARTPTS[v${idx}]`
     );
   }
 
@@ -190,6 +213,7 @@ export async function renderVideo(
   const {
     items,
     itemDurations,
+    droneShots,
     phrases,
     hookText,
     hookStart,
@@ -249,7 +273,7 @@ export async function renderVideo(
 
   // 1) 각 항목 체인
   const itemChains = items.map((it, i) =>
-    buildItemChain(i, itemDurations[i], it.kind === 'video'),
+    buildItemChain(i, itemDurations[i], it.kind === 'video', droneShots?.[i] ?? false),
   );
 
   // 2) 모두 [concated]으로 concat

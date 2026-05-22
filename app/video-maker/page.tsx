@@ -54,7 +54,7 @@ const isChirpVoice = (id: string) => id.includes('Chirp');
 const INITIAL_STEPS: StepState[] = [
   { key: 'upload', label: '사진/코너 입력', status: 'active' },
   { key: 'script', label: '숏츠 스크립트', status: 'idle' },
-  { key: 'voice', label: 'AI 음성', status: 'idle' },
+  { key: 'voice', label: '음성 생성', status: 'idle' },
   { key: 'render', label: '영상 렌더링', status: 'idle' },
   { key: 'done', label: '다운로드', status: 'idle' },
 ];
@@ -234,7 +234,7 @@ export default function VideoMakerPage() {
           };
         }),
       );
-      setStep('script', { status: 'active', detail: 'Claude가 분석 + 카피 작성 중…' });
+      setStep('script', { status: 'active', detail: '이미지 분석 + 카피 작성 중…' });
       const res = await fetch('/api/generate-script', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -477,6 +477,7 @@ export default function VideoMakerPage() {
         {
           items: photos.map((p) => ({ file: p.file, kind: p.kind })),
           itemDurations,
+          droneShots: photos.map((p) => p.droneShot ?? false),
           phrases,
           hookText: script.hook,
           hookStart,
@@ -662,7 +663,7 @@ export default function VideoMakerPage() {
           <div>
             <h2 className="text-lg font-semibold">2. 숏츠 스크립트</h2>
             <p className="text-sm text-gray-500">
-              Claude가 사진을 분석해 <b>hook · 코너 카피 · CTA</b>를 짚어줍니다. 각각 직접 수정 가능.
+              사진을 분석해 <b>hook · 코너 카피 · CTA</b>를 자동으로 작성합니다. 각각 직접 수정 가능.
             </p>
           </div>
           <button
@@ -753,7 +754,7 @@ export default function VideoMakerPage() {
       <section className="card mb-6">
         <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold">3. AI 음성</h2>
+            <h2 className="text-lg font-semibold">3. 음성 생성</h2>
             <p className="text-sm text-gray-500">
               hook · 코너 · cta를 각자 합성해 길이 측정 후 연결합니다.
               {isChirpVoice(speaker) ? ' · Chirp3-HD는 피치 슬라이더 무시됩니다.' : ''}
@@ -877,7 +878,7 @@ export default function VideoMakerPage() {
               className={`rounded-md px-3 py-1.5 font-medium ${bgmMode === 'ai' ? 'bg-white shadow text-gray-900' : 'text-gray-500'}`}
               onClick={() => setBgmMode('ai')}
             >
-              ✨ AI 생성
+              ✨ 자동 생성
             </button>
           </div>
         </div>
@@ -940,7 +941,7 @@ export default function VideoMakerPage() {
               onClick={handleGenerateBgm}
             >
               {bgmGenLoading
-                ? 'AI 음악 생성 중… (20~40초)'
+                ? '음악 생성 중… (20~40초)'
                 : bgmFile
                   ? '다시 생성'
                   : '음악 생성하기'}

@@ -5,6 +5,7 @@ export type CornerPhoto = {
   kind: 'image' | 'video';
   cornerName: string;
   description: string;
+  droneShot?: boolean;
 };
 
 export type StepKey = 'upload' | 'script' | 'voice' | 'render' | 'done';

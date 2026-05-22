@@ -27,7 +27,7 @@ export function PhotoUploader({
           <h2 className="text-lg font-semibold">1. 사진/영상 업로드 & 코너 설명</h2>
           <p className="text-sm text-gray-500">
             여러 장을 한 번에 추가하세요. 사진과 짧은 영상 클립을 섞어도 됩니다.
-            영상은 첫 프레임이 Claude 분석에 사용되고, 원본 소리는 사용되지 않습니다 (AI 나레이션이 입혀짐).
+            영상은 첫 프레임이 분석에 사용되고, 원본 소리는 사용되지 않습니다 (나레이션이 입혀짐).
           </p>
         </div>
         <button
@@ -82,6 +82,20 @@ export function PhotoUploader({
                       #{idx + 1} {p.kind === 'video' ? '🎬 영상' : '🖼 사진'}
                     </span>
                     <div className="flex items-center gap-1">
+                      {p.kind === 'image' && (
+                        <button
+                          type="button"
+                          title="드론샷: 클로즈업에서 서서히 줌아웃"
+                          className={`px-2 py-1 text-xs rounded border font-medium transition-colors ${
+                            p.droneShot
+                              ? 'bg-sky-500 text-white border-sky-500'
+                              : 'btn-secondary'
+                          }`}
+                          onClick={() => onUpdate(p.id, { droneShot: !p.droneShot })}
+                        >
+                          🚁 드론
+                        </button>
+                      )}
                       <button
                         type="button"
                         className="btn-secondary px-2 py-1 text-xs"
@@ -112,7 +126,7 @@ export function PhotoUploader({
                     <input
                       className="input"
                       value={p.cornerName}
-                      placeholder="비우면 Claude가 사진에서 추정"
+                      placeholder="비우면 사진에서 자동 추정"
                       onChange={(e) =>
                         onUpdate(p.id, { cornerName: e.target.value })
                       }
