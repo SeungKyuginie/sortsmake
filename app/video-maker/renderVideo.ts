@@ -187,23 +187,26 @@ function buildItemChain(idx: number, T: number, isVideo: boolean, droneShot = fa
     );
   }
 
-  // 기본 이미지: 줌 없이 순수 좌우 패닝만 (한 방향 글라이드, 매끄러움)
-  // cover 모드로 전체 화면 채우고 1.2x 프리스케일 → 좌우 폭만큼 천천히 이동.
-  const wPre = Math.round(WIDTH * 1.2);
-  const hPre = Math.round(HEIGHT * 1.2);
-  // 짝수 인덱스 좌→우, 홀수 우→좌 (단조롭지 않게)
+  // 기본 이미지: 가로 패닝으로 영상 효과
+  // 핵심: 가로 사진의 모든 가로 컨텐츠를 살린 채 좌우로 미끄러짐.
+  // - landscape (>9:16): 높이를 HEIGHT에 맞춤 → 너비가 1080보다 커서 패닝 가능
+  // - portrait (≤9:16): 너비를 WIDTH에 맞춤 → 패닝 폭 없음 (거의 static)
   const dir = idx % 2 === 0 ? 1 : -1;
-  // 패닝 폭 ±7.5% (총 15%) — 매끄러우면서 적당히 인지 가능
-  const xExpr = `(in_w-${WIDTH})/2 + ${WIDTH}*0.075*${dir}*(2*t/${Tstr}-1)`;
+  // 사용 가능한 가로 여유의 60% 사용 (가장자리 ±20% 여백 남김)
+  const xExpr = `(in_w-${WIDTH})*0.5 + (in_w-${WIDTH})*0.3*${dir}*(2*t/${Tstr}-1)`;
   const yExpr = `(in_h-${HEIGHT})/2`;
+  // aspect threshold = WIDTH/HEIGHT = 0.5625 (9:16)
+  // 콤마는 expression 안에서 \, 로 escape
+  const aspectThreshold = (WIDTH / HEIGHT).toFixed(6);
+  const scaleW = `if(gt(iw/ih\\,${aspectThreshold})\\,iw*${HEIGHT}/ih\\,${WIDTH})`;
+  const scaleH = `if(gt(iw/ih\\,${aspectThreshold})\\,${HEIGHT}\\,ih*${WIDTH}/iw)`;
 
   return (
     `[${idx}:v]split=2[bg${idx}][fg${idx}];` +
     `[bg${idx}]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,` +
     `crop=${WIDTH}:${HEIGHT},boxblur=24:4,setsar=1[bgX${idx}];` +
-    // FG: cover 모드 → 1.2x 프리스케일 → 좌우 패닝 crop
-    `[fg${idx}]scale=${wPre}:${hPre}:force_original_aspect_ratio=increase,` +
-    `crop=${wPre}:${hPre},setsar=1,` +
+    // FG: 가로면 높이 매칭(가로 여유 확보), 세로면 너비 매칭 후 좌우 crop 패닝
+    `[fg${idx}]scale=w='${scaleW}':h='${scaleH}',setsar=1,` +
     `crop=${WIDTH}:${HEIGHT}:'${xExpr}':'${yExpr}'[fgX${idx}];` +
     `[bgX${idx}][fgX${idx}]overlay=(W-w)/2:(H-h)/2,` +
     `fps=${FPS},format=yuv420p,setpts=PTS-STARTPTS[v${idx}]`
