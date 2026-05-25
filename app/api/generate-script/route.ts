@@ -100,7 +100,9 @@ export async function POST(req: Request) {
       `     · 친근한 권유: "장보기 부담스러우셨다면 이번주가 기회예요"\n` +
       `4. 전체 톤 — 친근한 단골 매장 직원이 알려주는 느낌. 너무 광고 같지 않게.\n` +
       `5. 다양성 — 같은 단어/표현/문장구조를 영상 안에서 반복 사용 금지.\n` +
-      `6. TTS 친화 — 마침표/쉼표 정확하게. 자연스러운 끊김.\n\n` +
+      `6. **구두점 규칙 (필수)** — 쉼표(,)는 절대 사용하지 마세요. 문장 구분은 모두 마침표(.)로 하세요. ` +
+      `숫자/가격도 쉼표 없이 붙여 쓰세요. 예: "9900원" (O), "9,900원" (X). "1500원 사과 한 봉지" (O).\n` +
+      `7. TTS 친화 — 마침표 정확하게. 자연스러운 끊김.\n\n` +
       `=== 출력 형식 ===\n` +
       `반드시 다음 JSON 한 덩어리만 출력. 코드펜스(\`\`\`)나 부가 설명 절대 금지.\n` +
       `{\n` +
@@ -200,17 +202,35 @@ export async function POST(req: Request) {
       );
     }
 
-    const hook = typeof parsed.hook === 'string' ? parsed.hook.trim() : '';
-    const cta = typeof parsed.cta === 'string' ? parsed.cta.trim() : '';
+    // 쉼표 후처리:
+    // 1) 숫자 사이 쉼표 제거 (가격 등): "9,900원" → "9900원"
+    // 2) 나머지 쉼표 → 마침표 + 공백
+    // 3) 중복 마침표/공백 정리
+    const sanitize = (s: string): string => {
+      if (!s) return s;
+      let t = s;
+      let prev: string;
+      do {
+        prev = t;
+        t = t.replace(/(\d),(\d)/g, '$1$2');
+      } while (prev !== t);
+      t = t.replace(/\s*,\s*/g, '. ');
+      t = t.replace(/\.\s*\./g, '.');
+      t = t.replace(/\s{2,}/g, ' ');
+      return t.trim();
+    };
+
+    const hook = typeof parsed.hook === 'string' ? sanitize(parsed.hook) : '';
+    const cta = typeof parsed.cta === 'string' ? sanitize(parsed.cta) : '';
     const segments = Array.isArray(parsed.segments)
       ? parsed.segments
           .map((s, i) => ({
             cornerIndex:
               typeof s?.cornerIndex === 'number' ? s.cornerIndex : i + 1,
-            text: typeof s?.text === 'string' ? s.text.trim() : '',
+            text: typeof s?.text === 'string' ? sanitize(s.text) : '',
             highlight:
               typeof s?.highlight === 'string' && s.highlight.trim()
-                ? s.highlight.trim()
+                ? sanitize(s.highlight)
                 : undefined,
           }))
           .filter((s) => s.text)
