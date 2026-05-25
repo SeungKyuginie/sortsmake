@@ -6,6 +6,7 @@ import { distributeTimings, splitPhrases } from './parseSegments';
 import { PhotoUploader } from './PhotoUploader';
 import { StepIndicator } from './StepIndicator';
 import { VoicePreviewButton } from './VoicePreviewButton';
+import { clearAll, loadItem, saveItem } from './storage';
 import {
   estimateRenderSeconds,
   probeAudioDuration,
@@ -220,6 +221,171 @@ export default function VideoMakerPage() {
     const id = setInterval(() => setNowTick((n) => n + 1), 500);
     return () => clearInterval(id);
   }, [rendering]);
+
+  // ---------- 작업 상태 저장/복원 (IndexedDB) ----------
+  // 페이지 새로고침해도 작업이 유지됨. 초기화 버튼으로만 삭제.
+  type SerializedPhoto = {
+    id: string;
+    file: File;
+    kind: 'image' | 'video';
+    cornerName: string;
+    description: string;
+    droneShot?: boolean;
+    originalFile?: File;
+    originalKind?: 'image' | 'video';
+  };
+
+  const [hydrated, setHydrated] = useState(false);
+
+  // 마운트 시: 모든 상태를 IndexedDB에서 복원
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const [
+        sStoreName, sDuration, sPhotos,
+        sSpeaker, sRate, sPitch,
+        sMultiVoice, sHookVoice, sCtaVoice, sCornerVoices,
+        sScript, sVoice,
+        sBgmMode, sBgmFile, sBgmVolume, sBgmPrompt,
+        sVideoBlob,
+      ] = await Promise.all([
+        loadItem<string>('storeName'),
+        loadItem<number>('duration'),
+        loadItem<SerializedPhoto[]>('photos'),
+        loadItem<string>('speaker'),
+        loadItem<number>('speakingRate'),
+        loadItem<number>('pitch'),
+        loadItem<boolean>('multiVoice'),
+        loadItem<string | null>('hookVoice'),
+        loadItem<string | null>('ctaVoice'),
+        loadItem<(string | undefined)[]>('cornerVoices'),
+        loadItem<ShortsScript>('script'),
+        loadItem<VoiceTimeline>('voice'),
+        loadItem<'upload' | 'ai'>('bgmMode'),
+        loadItem<File>('bgmFile'),
+        loadItem<number>('bgmVolume'),
+        loadItem<string>('bgmPrompt'),
+        loadItem<Blob>('videoBlob'),
+      ]);
+      if (cancelled) return;
+
+      if (sStoreName) setStoreName(sStoreName);
+      if (typeof sDuration === 'number') setDuration(sDuration);
+      if (sPhotos && sPhotos.length) {
+        setPhotos(
+          sPhotos.map((p) => ({
+            ...p,
+            previewUrl: URL.createObjectURL(p.file),
+            originalPreviewUrl: p.originalFile
+              ? URL.createObjectURL(p.originalFile)
+              : undefined,
+            droneAiStatus: p.droneShot ? 'ready' : 'idle',
+          })),
+        );
+      }
+      if (sSpeaker) setSpeaker(sSpeaker);
+      if (typeof sRate === 'number') setSpeakingRate(sRate);
+      if (typeof sPitch === 'number') setPitch(sPitch);
+      if (typeof sMultiVoice === 'boolean') setMultiVoice(sMultiVoice);
+      if (sHookVoice) setHookVoice(sHookVoice);
+      if (sCtaVoice) setCtaVoice(sCtaVoice);
+      if (sCornerVoices) setCornerVoices(sCornerVoices);
+      if (sScript) setScript(sScript);
+      if (sVoice) setVoice(sVoice);
+      if (sBgmMode) setBgmMode(sBgmMode);
+      if (sBgmFile) setBgmFile(sBgmFile);
+      if (typeof sBgmVolume === 'number') setBgmVolume(sBgmVolume);
+      if (sBgmPrompt) setBgmPrompt(sBgmPrompt);
+      if (sVideoBlob) setVideoBlob(sVideoBlob);
+
+      // 단계 표시 자동 복원 — 어디까지 진행됐는지 추론
+      const nextSteps = [...INITIAL_STEPS];
+      if (sPhotos && sPhotos.length) nextSteps[0] = { ...nextSteps[0], status: 'complete' };
+      if (sScript) nextSteps[1] = { ...nextSteps[1], status: 'complete', detail: '편집 가능' };
+      if (sVoice) nextSteps[2] = { ...nextSteps[2], status: 'complete', detail: `${sVoice.totalDur.toFixed(1)}초` };
+      if (sVideoBlob) {
+        nextSteps[3] = { ...nextSteps[3], status: 'complete' };
+        nextSteps[4] = { ...nextSteps[4], status: 'complete', detail: '다운로드 준비됨' };
+      }
+      // 가장 최근 미완료 단계를 active로
+      const firstIdle = nextSteps.findIndex((s) => s.status === 'idle');
+      if (firstIdle >= 0) nextSteps[firstIdle].status = 'active';
+      setSteps(nextSteps);
+
+      setHydrated(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 상태 변화 시 자동 저장 (하이드레이션 이후만)
+  useEffect(() => { if (hydrated) saveItem('storeName', storeName); }, [hydrated, storeName]);
+  useEffect(() => { if (hydrated) saveItem('duration', duration); }, [hydrated, duration]);
+  useEffect(() => {
+    if (!hydrated) return;
+    const toSave: SerializedPhoto[] = photos.map((p) => ({
+      id: p.id,
+      file: p.file,
+      kind: p.kind,
+      cornerName: p.cornerName,
+      description: p.description,
+      droneShot: p.droneShot,
+      originalFile: p.originalFile,
+      originalKind: p.originalKind,
+    }));
+    saveItem('photos', toSave);
+  }, [hydrated, photos]);
+  useEffect(() => { if (hydrated) saveItem('speaker', speaker); }, [hydrated, speaker]);
+  useEffect(() => { if (hydrated) saveItem('speakingRate', speakingRate); }, [hydrated, speakingRate]);
+  useEffect(() => { if (hydrated) saveItem('pitch', pitch); }, [hydrated, pitch]);
+  useEffect(() => { if (hydrated) saveItem('multiVoice', multiVoice); }, [hydrated, multiVoice]);
+  useEffect(() => { if (hydrated) saveItem('hookVoice', hookVoice ?? null); }, [hydrated, hookVoice]);
+  useEffect(() => { if (hydrated) saveItem('ctaVoice', ctaVoice ?? null); }, [hydrated, ctaVoice]);
+  useEffect(() => { if (hydrated) saveItem('cornerVoices', cornerVoices); }, [hydrated, cornerVoices]);
+  useEffect(() => { if (hydrated) saveItem('script', script); }, [hydrated, script]);
+  useEffect(() => { if (hydrated) saveItem('voice', voice); }, [hydrated, voice]);
+  useEffect(() => { if (hydrated) saveItem('bgmMode', bgmMode); }, [hydrated, bgmMode]);
+  useEffect(() => { if (hydrated) saveItem('bgmFile', bgmFile); }, [hydrated, bgmFile]);
+  useEffect(() => { if (hydrated) saveItem('bgmVolume', bgmVolume); }, [hydrated, bgmVolume]);
+  useEffect(() => { if (hydrated) saveItem('bgmPrompt', bgmPrompt); }, [hydrated, bgmPrompt]);
+  useEffect(() => { if (hydrated) saveItem('videoBlob', videoBlob); }, [hydrated, videoBlob]);
+
+  // 초기화: 모든 작업 상태 삭제 후 기본값으로 리셋
+  const handleReset = async () => {
+    if (!window.confirm('지금까지 작업한 모든 내용(사진·스크립트·음성·배경음악·영상)을 삭제하시겠습니까?')) {
+      return;
+    }
+    await clearAll();
+    // 블롭 URL 정리
+    for (const p of photos) {
+      if (p.previewUrl) URL.revokeObjectURL(p.previewUrl);
+      if (p.originalPreviewUrl) URL.revokeObjectURL(p.originalPreviewUrl);
+    }
+    // 상태 리셋
+    setStoreName('');
+    setDuration(30);
+    setPhotos([]);
+    setSpeaker('ko-KR-Chirp3-HD-Leda');
+    setSpeakingRate(1.1);
+    setPitch(0);
+    setMultiVoice(false);
+    setHookVoice(undefined);
+    setCtaVoice(undefined);
+    setCornerVoices([]);
+    setScript(null);
+    setVoice(null);
+    setBgmMode('upload');
+    setBgmFile(null);
+    setBgmVolume(0.16);
+    setBgmPrompt(
+      'Upbeat, cheerful Korean retail store background music. Light percussion, bright marimba, friendly and energetic. Instrumental only.',
+    );
+    setVideoBlob(null);
+    setSteps(INITIAL_STEPS);
+    setError(null);
+  };
 
   const setStep = (key: StepKey, patch: Partial<StepState>) => {
     setSteps((prev) => prev.map((s) => (s.key === key ? { ...s, ...patch } : s)));
@@ -739,13 +905,26 @@ export default function VideoMakerPage() {
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-8">
-      <header className="mb-8">
-        <h1 className="text-2xl font-bold tracking-tight">
-          마트 숏츠 메이커 🎬
-        </h1>
-        <p className="mt-1 text-sm text-gray-600">
-          유튜브 숏츠 전문가 패턴 — 3초 후킹 · 카라오케 자막 · 블러 커버 · CTA — 으로 1080×1920 MP4를 자동 생성합니다.
-        </p>
+      <header className="mb-8 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">
+            마트 숏츠 메이커 🎬
+          </h1>
+          <p className="mt-1 text-sm text-gray-600">
+            유튜브 숏츠 전문가 패턴 — 3초 후킹 · 카라오케 자막 · 블러 커버 · CTA — 으로 1080×1920 MP4를 자동 생성합니다.
+          </p>
+          <p className="mt-1 text-xs text-gray-400">
+            작업한 내용은 자동 저장됩니다 (브라우저 새로고침해도 유지). 새로 시작하려면 우측 초기화 버튼을 눌러주세요.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={handleReset}
+          className="btn-secondary shrink-0 text-sm text-red-600"
+          title="모든 작업 내용 삭제"
+        >
+          🔄 초기화
+        </button>
       </header>
 
       <section className="card mb-6">
