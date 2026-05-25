@@ -28,25 +28,6 @@ type SpeakerGroup = { group: string; voices: SpeakerOption[] };
 
 const SPEAKER_GROUPS: SpeakerGroup[] = [
   {
-    group: '🎤 ElevenLabs (다국어 v2, 자연스러움)',
-    voices: [
-      { id: 'eleven:EXAVITQu4vr4xnSDxMaL', label: 'Sarah (여성, 부드러움)' },
-      { id: 'eleven:XB0fDUnXU5powFXDhCwa', label: 'Charlotte (여성, 차분)' },
-      { id: 'eleven:Xb7hH8MSUJpSbSDYk0k2', label: 'Alice (여성, 또렷)' },
-      { id: 'eleven:pFZP5JQG7iQjIQuC4Bku', label: 'Lily (여성, 따뜻)' },
-      { id: 'eleven:9BWtsMINqrJLrRacOk9x', label: 'Aria (여성, 명료)' },
-      { id: 'eleven:FGY2WhTYpPnrIDTdsKH5', label: 'Laura (여성, 활기)' },
-      { id: 'eleven:cgSgspJ2msm6clMCkdW9', label: 'Jessica (여성, 친근)' },
-      { id: 'eleven:JBFqnCBsd6RMkjVDRZzb', label: 'George (남성, 안정)' },
-      { id: 'eleven:nPczCjzI2devNBz1zQrb', label: 'Brian (남성, 깊음)' },
-      { id: 'eleven:cjVigY5qzO86Huf0OWal', label: 'Eric (남성, 부드러움)' },
-      { id: 'eleven:onwK4e9ZLuTAKqWW03F9', label: 'Daniel (남성, 신뢰감)' },
-      { id: 'eleven:bIHbv24MWmeRgasZH58o', label: 'Will (남성, 또렷)' },
-      { id: 'eleven:CwhRBWXzGAHq8TQ4Fs17', label: 'Roger (남성, 중후)' },
-      { id: 'eleven:TX3LPaxmHKxFdv7VOQHJ', label: 'Liam (남성, 명료)' },
-    ],
-  },
-  {
     group: '📺 Neural2 (아나운서 톤, 또박또박)',
     voices: [
       { id: 'ko-KR-Neural2-A', label: 'Neural2 A (여성, 아나운서)' },
