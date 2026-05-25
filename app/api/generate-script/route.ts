@@ -89,7 +89,6 @@ export async function POST(req: Request) {
       `   - 일상 한국어 톤. "이번주 사과 1.5kg에 9,900원으로 들어와 있어요" 같은 친구가 알려주는 듯한 말투.\n` +
       `   - **마트 광고 클리셰는 자제** — "시간특가", "타임세일", "조기품절 주의", "한정수량" 같은 자극적 단어는 꼭 필요할 때만, 한 영상에 1~2번 이내.\n` +
       `   - 가격/할인율은 사진이나 힌트에 명확히 보일 때만 정확히 인용. 없는 숫자 절대 지어내지 말 것.\n` +
-      `   - highlight 필드: 그 코너에서 화면 강조할 핵심 단어/숫자 1개 (예: "9,900원", "30% 할인", "한우 등심"). 없으면 빈 문자열.\n` +
       `   - 코너마다 다른 시작어/구조로 — "이번엔", "다음은", "그리고" 같은 단조로운 연결어 반복 금지.\n` +
       `3. CTA (마지막 2초) — 자연스러운 마무리.\n` +
       `   - 15~20자 정도. 단순 "지금 오세요"보다 구체적으로.\n` +
@@ -108,8 +107,8 @@ export async function POST(req: Request) {
       `{\n` +
       `  "hook": "...",\n` +
       `  "segments": [\n` +
-      `    {"cornerIndex": 1, "text": "...", "highlight": "9,900원"},\n` +
-      `    {"cornerIndex": 2, "text": "...", "highlight": "30% 할인"}\n` +
+      `    {"cornerIndex": 1, "text": "..."},\n` +
+      `    {"cornerIndex": 2, "text": "..."}\n` +
       `  ],\n` +
       `  "cta": "..."\n` +
       `}\n\n` +
@@ -183,7 +182,6 @@ export async function POST(req: Request) {
     type ParsedSegment = {
       cornerIndex?: number;
       text?: string;
-      highlight?: string;
     };
     type Parsed = {
       hook?: string;
@@ -228,10 +226,6 @@ export async function POST(req: Request) {
             cornerIndex:
               typeof s?.cornerIndex === 'number' ? s.cornerIndex : i + 1,
             text: typeof s?.text === 'string' ? sanitize(s.text) : '',
-            highlight:
-              typeof s?.highlight === 'string' && s.highlight.trim()
-                ? sanitize(s.highlight)
-                : undefined,
           }))
           .filter((s) => s.text)
       : [];

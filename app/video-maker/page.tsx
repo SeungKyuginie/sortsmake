@@ -625,7 +625,6 @@ export default function VideoMakerPage() {
         return {
           cornerIndex: i + 1,
           text: (found.text ?? '').toString(),
-          highlight: found.highlight ? String(found.highlight) : undefined,
         };
       });
 
@@ -796,20 +795,14 @@ export default function VideoMakerPage() {
     for (let i = 0; i < N; i++) {
       const seg = script.segments[i];
       const text = seg?.text ?? '';
-      const highlight = seg?.highlight;
       const phraseTexts = splitPhrases(text);
       if (phraseTexts.length === 0) {
         cursor += cornerDurs[i];
         continue;
       }
       const timed = distributeTimings(phraseTexts, cornerDurs[i], cursor);
-      // 하이라이트 단어가 포함된 첫 phrase에 highlight 플래그
-      let highlighted = !highlight;
       for (const t of timed) {
-        const isHi =
-          !highlighted && highlight ? t.text.includes(highlight) : false;
-        if (isHi) highlighted = true;
-        phrases.push({ ...t, highlight: isHi });
+        phrases.push({ ...t, highlight: false });
       }
       cursor += cornerDurs[i];
     }
@@ -1084,32 +1077,17 @@ export default function VideoMakerPage() {
                 🎬 코너 ({script.segments.length}개)
               </div>
               {script.segments.map((seg, i) => (
-                <div key={i} className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_180px]">
-                  <div>
-                    <label className="label">
-                      코너 {i + 1} 카피
-                    </label>
-                    <textarea
-                      className="input min-h-[64px]"
-                      value={seg.text}
-                      onChange={(e) =>
-                        updateSegment(i, { text: e.target.value })
-                      }
-                    />
-                  </div>
-                  <div>
-                    <label className="label">강조어 (노란색)</label>
-                    <input
-                      className="input"
-                      value={seg.highlight ?? ''}
-                      onChange={(e) =>
-                        updateSegment(i, {
-                          highlight: e.target.value.trim() || undefined,
-                        })
-                      }
-                      placeholder="예: 9,900원"
-                    />
-                  </div>
+                <div key={i}>
+                  <label className="label">
+                    코너 {i + 1} 카피
+                  </label>
+                  <textarea
+                    className="input min-h-[64px]"
+                    value={seg.text}
+                    onChange={(e) =>
+                      updateSegment(i, { text: e.target.value })
+                    }
+                  />
                 </div>
               ))}
             </div>

@@ -378,36 +378,20 @@ export async function renderVideo(
     }
   }
 
-  // Phrase 오버레이 — 중간 라인
+  // Phrase 오버레이 — 중간 라인 (모두 흰색 일반 톤, 강조어 없음)
   for (const p of phrases) {
     if (!p.text.trim() || p.end <= p.start) continue;
-    if (p.highlight) {
-      drawNodes.push(
-        drawTextNode({
-          text: p.text,
-          start: p.start,
-          end: p.end,
-          fontSize: FONT_HIGHLIGHT,
-          y: PHRASE_Y,
-          color: '0xffd60a', // 노란색 강조
-          fontFile,
-          box: true,
-          borderw: 8,
-        }),
-      );
-    } else {
-      drawNodes.push(
-        drawTextNode({
-          text: p.text,
-          start: p.start,
-          end: p.end,
-          fontSize: FONT_BASE,
-          y: PHRASE_Y,
-          color: 'white',
-          fontFile,
-        }),
-      );
-    }
+    drawNodes.push(
+      drawTextNode({
+        text: p.text,
+        start: p.start,
+        end: p.end,
+        fontSize: FONT_BASE,
+        y: PHRASE_Y,
+        color: 'white',
+        fontFile,
+      }),
+    );
   }
 
   // CTA 오버레이 (상단, hook과 동일 위치 — 시간이 안 겹쳐서 안전)
