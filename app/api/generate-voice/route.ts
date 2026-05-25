@@ -25,6 +25,10 @@ const ALLOWED_VOICES = new Set([
   'ko-KR-Wavenet-B',
   'ko-KR-Wavenet-C',
   'ko-KR-Wavenet-D',
+  // Neural2 (아나운서/뉴스 톤, 또박또박)
+  'ko-KR-Neural2-A',
+  'ko-KR-Neural2-B',
+  'ko-KR-Neural2-C',
   // Chirp3-HD (2024 신모델, 표현력·활기 ↑)
   'ko-KR-Chirp3-HD-Aoede',
   'ko-KR-Chirp3-HD-Kore',

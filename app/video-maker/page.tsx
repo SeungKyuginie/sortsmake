@@ -26,7 +26,15 @@ type SpeakerGroup = { group: string; voices: SpeakerOption[] };
 
 const SPEAKER_GROUPS: SpeakerGroup[] = [
   {
-    group: '🔥 Chirp3-HD (발랄·활기, 권장)',
+    group: '📺 Neural2 (아나운서 톤, 또박또박)',
+    voices: [
+      { id: 'ko-KR-Neural2-A', label: 'Neural2 A (여성, 아나운서)' },
+      { id: 'ko-KR-Neural2-B', label: 'Neural2 B (여성, 차분 진행자)' },
+      { id: 'ko-KR-Neural2-C', label: 'Neural2 C (남성, 뉴스 앵커)' },
+    ],
+  },
+  {
+    group: '🔥 Chirp3-HD (발랄·활기)',
     voices: [
       { id: 'ko-KR-Chirp3-HD-Leda', label: 'Leda (여성, 발랄/소녀)' },
       { id: 'ko-KR-Chirp3-HD-Aoede', label: 'Aoede (여성, 명랑)' },
