@@ -5,6 +5,7 @@ import { encodeImageForClaude, encodeVideoFirstFrame } from './encodeImage';
 import { distributeTimings, splitPhrases } from './parseSegments';
 import { PhotoUploader } from './PhotoUploader';
 import { StepIndicator } from './StepIndicator';
+import { VoicePreviewButton } from './VoicePreviewButton';
 import {
   estimateRenderSeconds,
   probeAudioDuration,
@@ -34,15 +35,43 @@ const SPEAKER_GROUPS: SpeakerGroup[] = [
     ],
   },
   {
-    group: '🔥 Chirp3-HD (발랄·활기)',
+    group: '🔥 Chirp3-HD 여성 (발랄·표현력)',
     voices: [
-      { id: 'ko-KR-Chirp3-HD-Leda', label: 'Leda (여성, 발랄/소녀)' },
-      { id: 'ko-KR-Chirp3-HD-Aoede', label: 'Aoede (여성, 명랑)' },
-      { id: 'ko-KR-Chirp3-HD-Kore', label: 'Kore (여성, 밝음)' },
-      { id: 'ko-KR-Chirp3-HD-Zephyr', label: 'Zephyr (여성, 청량)' },
-      { id: 'ko-KR-Chirp3-HD-Puck', label: 'Puck (남성, 장난기/활기)' },
-      { id: 'ko-KR-Chirp3-HD-Charon', label: 'Charon (남성, 활기)' },
-      { id: 'ko-KR-Chirp3-HD-Fenrir', label: 'Fenrir (남성, 강한 톤)' },
+      { id: 'ko-KR-Chirp3-HD-Aoede', label: 'Aoede (명랑)' },
+      { id: 'ko-KR-Chirp3-HD-Kore', label: 'Kore (밝음)' },
+      { id: 'ko-KR-Chirp3-HD-Leda', label: 'Leda (발랄/소녀)' },
+      { id: 'ko-KR-Chirp3-HD-Zephyr', label: 'Zephyr (청량)' },
+      { id: 'ko-KR-Chirp3-HD-Achernar', label: 'Achernar (부드러움)' },
+      { id: 'ko-KR-Chirp3-HD-Autonoe', label: 'Autonoe (따뜻)' },
+      { id: 'ko-KR-Chirp3-HD-Callirrhoe', label: 'Callirrhoe (차분)' },
+      { id: 'ko-KR-Chirp3-HD-Despina', label: 'Despina (또렷)' },
+      { id: 'ko-KR-Chirp3-HD-Erinome', label: 'Erinome (가벼움)' },
+      { id: 'ko-KR-Chirp3-HD-Gacrux', label: 'Gacrux (성숙)' },
+      { id: 'ko-KR-Chirp3-HD-Laomedeia', label: 'Laomedeia (활기)' },
+      { id: 'ko-KR-Chirp3-HD-Pulcherrima', label: 'Pulcherrima (감성)' },
+      { id: 'ko-KR-Chirp3-HD-Sulafat', label: 'Sulafat (안정)' },
+      { id: 'ko-KR-Chirp3-HD-Vindemiatrix', label: 'Vindemiatrix (성숙)' },
+    ],
+  },
+  {
+    group: '🔥 Chirp3-HD 남성 (다양한 톤)',
+    voices: [
+      { id: 'ko-KR-Chirp3-HD-Charon', label: 'Charon (활기)' },
+      { id: 'ko-KR-Chirp3-HD-Fenrir', label: 'Fenrir (강한 톤)' },
+      { id: 'ko-KR-Chirp3-HD-Puck', label: 'Puck (장난기)' },
+      { id: 'ko-KR-Chirp3-HD-Orus', label: 'Orus (안정)' },
+      { id: 'ko-KR-Chirp3-HD-Achird', label: 'Achird (또렷)' },
+      { id: 'ko-KR-Chirp3-HD-Algenib', label: 'Algenib (낮음)' },
+      { id: 'ko-KR-Chirp3-HD-Algieba', label: 'Algieba (중후)' },
+      { id: 'ko-KR-Chirp3-HD-Alnilam', label: 'Alnilam (부드러움)' },
+      { id: 'ko-KR-Chirp3-HD-Enceladus', label: 'Enceladus (성숙)' },
+      { id: 'ko-KR-Chirp3-HD-Iapetus', label: 'Iapetus (깊음)' },
+      { id: 'ko-KR-Chirp3-HD-Rasalgethi', label: 'Rasalgethi (명료)' },
+      { id: 'ko-KR-Chirp3-HD-Sadachbia', label: 'Sadachbia (밝음)' },
+      { id: 'ko-KR-Chirp3-HD-Sadaltager', label: 'Sadaltager (차분)' },
+      { id: 'ko-KR-Chirp3-HD-Schedar', label: 'Schedar (안정)' },
+      { id: 'ko-KR-Chirp3-HD-Umbriel', label: 'Umbriel (저음)' },
+      { id: 'ko-KR-Chirp3-HD-Zubenelgenubi', label: 'Zubenelgenubi (선명)' },
     ],
   },
   {
@@ -52,6 +81,15 @@ const SPEAKER_GROUPS: SpeakerGroup[] = [
       { id: 'ko-KR-Wavenet-B', label: 'WaveNet B (여성, 보통)' },
       { id: 'ko-KR-Wavenet-C', label: 'WaveNet C (남성, 차분)' },
       { id: 'ko-KR-Wavenet-D', label: 'WaveNet D (남성, 보통)' },
+    ],
+  },
+  {
+    group: '📦 Standard (저비용 기본 음성)',
+    voices: [
+      { id: 'ko-KR-Standard-A', label: 'Standard A (여성)' },
+      { id: 'ko-KR-Standard-B', label: 'Standard B (여성)' },
+      { id: 'ko-KR-Standard-C', label: 'Standard C (남성)' },
+      { id: 'ko-KR-Standard-D', label: 'Standard D (남성)' },
     ],
   },
 ];
@@ -748,21 +786,24 @@ export default function VideoMakerPage() {
           </div>
           <div>
             <label className="label">기본 보이스</label>
-            <select
-              className="input"
-              value={speaker}
-              onChange={(e) => setSpeaker(e.target.value)}
-            >
-              {SPEAKER_GROUPS.map((g) => (
-                <optgroup key={g.group} label={g.group}>
-                  {g.voices.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.label}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
+            <div className="flex items-center gap-2">
+              <select
+                className="input flex-1"
+                value={speaker}
+                onChange={(e) => setSpeaker(e.target.value)}
+              >
+                {SPEAKER_GROUPS.map((g) => (
+                  <optgroup key={g.group} label={g.group}>
+                    {g.voices.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+              <VoicePreviewButton voiceId={speaker} />
+            </div>
           </div>
         </div>
         <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -932,44 +973,55 @@ export default function VideoMakerPage() {
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <div>
                   <label className="label">🪝 Hook 보이스</label>
-                  <select
-                    className="input"
-                    value={hookVoice ?? ''}
-                    onChange={(e) =>
-                      setHookVoice(e.target.value || undefined)
-                    }
-                  >
-                    <option value="">기본 사용</option>
-                    {renderVoiceOptions()}
-                  </select>
-                </div>
-                {script.segments.map((_, i) => (
-                  <div key={i}>
-                    <label className="label">🎬 코너 {i + 1} 보이스</label>
+                  <div className="flex items-center gap-2">
                     <select
-                      className="input"
-                      value={cornerVoices[i] ?? ''}
+                      className="input flex-1"
+                      value={hookVoice ?? ''}
                       onChange={(e) =>
-                        updateCornerVoice(i, e.target.value || undefined)
+                        setHookVoice(e.target.value || undefined)
                       }
                     >
                       <option value="">기본 사용</option>
                       {renderVoiceOptions()}
                     </select>
+                    <VoicePreviewButton voiceId={resolveVoice(hookVoice)} />
+                  </div>
+                </div>
+                {script.segments.map((_, i) => (
+                  <div key={i}>
+                    <label className="label">🎬 코너 {i + 1} 보이스</label>
+                    <div className="flex items-center gap-2">
+                      <select
+                        className="input flex-1"
+                        value={cornerVoices[i] ?? ''}
+                        onChange={(e) =>
+                          updateCornerVoice(i, e.target.value || undefined)
+                        }
+                      >
+                        <option value="">기본 사용</option>
+                        {renderVoiceOptions()}
+                      </select>
+                      <VoicePreviewButton
+                        voiceId={resolveVoice(cornerVoices[i])}
+                      />
+                    </div>
                   </div>
                 ))}
                 <div>
                   <label className="label">📣 CTA 보이스</label>
-                  <select
-                    className="input"
-                    value={ctaVoice ?? ''}
-                    onChange={(e) =>
-                      setCtaVoice(e.target.value || undefined)
-                    }
-                  >
-                    <option value="">기본 사용</option>
-                    {renderVoiceOptions()}
-                  </select>
+                  <div className="flex items-center gap-2">
+                    <select
+                      className="input flex-1"
+                      value={ctaVoice ?? ''}
+                      onChange={(e) =>
+                        setCtaVoice(e.target.value || undefined)
+                      }
+                    >
+                      <option value="">기본 사용</option>
+                      {renderVoiceOptions()}
+                    </select>
+                    <VoicePreviewButton voiceId={resolveVoice(ctaVoice)} />
+                  </div>
                 </div>
               </div>
             ) : (

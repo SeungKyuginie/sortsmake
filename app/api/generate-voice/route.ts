@@ -20,6 +20,11 @@ type RequestBody = {
 };
 
 const ALLOWED_VOICES = new Set([
+  // Standard (저비용 기본)
+  'ko-KR-Standard-A',
+  'ko-KR-Standard-B',
+  'ko-KR-Standard-C',
+  'ko-KR-Standard-D',
   // WaveNet (안정, 차분~보통)
   'ko-KR-Wavenet-A',
   'ko-KR-Wavenet-B',
@@ -29,14 +34,38 @@ const ALLOWED_VOICES = new Set([
   'ko-KR-Neural2-A',
   'ko-KR-Neural2-B',
   'ko-KR-Neural2-C',
-  // Chirp3-HD (2024 신모델, 표현력·활기 ↑)
+  // Chirp3-HD 여성 (표현력 ↑)
   'ko-KR-Chirp3-HD-Aoede',
   'ko-KR-Chirp3-HD-Kore',
   'ko-KR-Chirp3-HD-Leda',
   'ko-KR-Chirp3-HD-Zephyr',
+  'ko-KR-Chirp3-HD-Achernar',
+  'ko-KR-Chirp3-HD-Autonoe',
+  'ko-KR-Chirp3-HD-Callirrhoe',
+  'ko-KR-Chirp3-HD-Despina',
+  'ko-KR-Chirp3-HD-Erinome',
+  'ko-KR-Chirp3-HD-Gacrux',
+  'ko-KR-Chirp3-HD-Laomedeia',
+  'ko-KR-Chirp3-HD-Pulcherrima',
+  'ko-KR-Chirp3-HD-Sulafat',
+  'ko-KR-Chirp3-HD-Vindemiatrix',
+  // Chirp3-HD 남성
   'ko-KR-Chirp3-HD-Puck',
   'ko-KR-Chirp3-HD-Charon',
   'ko-KR-Chirp3-HD-Fenrir',
+  'ko-KR-Chirp3-HD-Orus',
+  'ko-KR-Chirp3-HD-Achird',
+  'ko-KR-Chirp3-HD-Algenib',
+  'ko-KR-Chirp3-HD-Algieba',
+  'ko-KR-Chirp3-HD-Alnilam',
+  'ko-KR-Chirp3-HD-Enceladus',
+  'ko-KR-Chirp3-HD-Iapetus',
+  'ko-KR-Chirp3-HD-Rasalgethi',
+  'ko-KR-Chirp3-HD-Sadachbia',
+  'ko-KR-Chirp3-HD-Sadaltager',
+  'ko-KR-Chirp3-HD-Schedar',
+  'ko-KR-Chirp3-HD-Umbriel',
+  'ko-KR-Chirp3-HD-Zubenelgenubi',
 ]);
 
 async function synthesize(
