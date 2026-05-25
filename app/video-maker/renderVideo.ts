@@ -111,6 +111,57 @@ type DrawTextOpts = {
   borderw?: number;
 };
 
+// 한글 텍스트를 maxChars 길이로 자동 줄바꿈 (공백 기준 토큰화).
+// 토큰이 max보다 길면 그대로 한 줄에 둠 (강제 분리 안 함).
+function wrapKoreanText(text: string, maxCharsPerLine: number): string[] {
+  const trimmed = text.trim();
+  if (!trimmed) return [];
+  const tokens = trimmed.split(/\s+/);
+  const lines: string[] = [];
+  let cur = '';
+  for (const tok of tokens) {
+    if (!cur) {
+      cur = tok;
+      continue;
+    }
+    const next = `${cur} ${tok}`;
+    if (next.length > maxCharsPerLine) {
+      lines.push(cur);
+      cur = tok;
+    } else {
+      cur = next;
+    }
+  }
+  if (cur) lines.push(cur);
+  return lines;
+}
+
+// fontSize 기준 한 줄에 안전하게 들어갈 한글 글자 수 추정.
+// 1080 폭에 좌우 60px 안전여백 → 사용 가능 폭 ≈ 960px.
+// 한글 한 글자 폭은 보통 fontSize × 0.95 정도 (Pretendard 기준).
+function maxCharsForFont(fontSize: number, usableWidth = 960): number {
+  const charWidth = fontSize * 0.95;
+  return Math.max(4, Math.floor(usableWidth / charWidth));
+}
+
+// 다중 라인 텍스트를 여러 drawtext 노드로 분해. 각 줄은 lineHeight만큼 아래로.
+function drawWrappedTextNodes(
+  text: string,
+  baseOpts: Omit<DrawTextOpts, 'text' | 'y'> & { y: number },
+): string[] {
+  const maxChars = maxCharsForFont(baseOpts.fontSize);
+  const lines = wrapKoreanText(text, maxChars);
+  if (lines.length === 0) return [];
+  const lineHeight = Math.round(baseOpts.fontSize * 1.15);
+  return lines.map((line, i) =>
+    drawTextNode({
+      ...baseOpts,
+      text: line,
+      y: baseOpts.y + i * lineHeight,
+    }),
+  );
+}
+
 function drawTextNode(opts: DrawTextOpts): string {
   const {
     text,
@@ -294,13 +345,12 @@ export async function renderVideo(
   const drawNodes: string[] = [];
 
   // Hook 오버레이 — 첫 0~SLAM초는 거대 노랑(text slam, pattern interrupt),
-  // 그 후엔 표준 흰색 hook. drop-off 구간(첫 0.8초)에 강제 시선 고정.
+  // 그 후엔 표준 흰색 hook. 긴 텍스트는 자동 줄바꿈으로 화면 안에.
   if (hookText.trim() && hookEnd > hookStart) {
     const slamEnd = Math.min(hookStart + HOOK_SLAM_DURATION, hookEnd);
     if (slamEnd > hookStart) {
       drawNodes.push(
-        drawTextNode({
-          text: hookText,
+        ...drawWrappedTextNodes(hookText, {
           start: hookStart,
           end: slamEnd,
           fontSize: FONT_HOOK_SLAM,
@@ -314,8 +364,7 @@ export async function renderVideo(
     }
     if (hookEnd > slamEnd) {
       drawNodes.push(
-        drawTextNode({
-          text: hookText,
+        ...drawWrappedTextNodes(hookText, {
           start: slamEnd,
           end: hookEnd,
           fontSize: FONT_HOOK,
@@ -362,10 +411,10 @@ export async function renderVideo(
   }
 
   // CTA 오버레이 (상단, hook과 동일 위치 — 시간이 안 겹쳐서 안전)
+  // 긴 CTA 텍스트도 자동 줄바꿈
   if (ctaText.trim() && ctaEnd > ctaStart) {
     drawNodes.push(
-      drawTextNode({
-        text: ctaText,
+      ...drawWrappedTextNodes(ctaText, {
         start: ctaStart,
         end: ctaEnd,
         fontSize: FONT_CTA,
