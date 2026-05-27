@@ -1,13 +1,23 @@
-import { auth } from '@/auth';
+// ⚠️ 인증 일시 비활성화 (사용자 요청).
+// 다시 켜려면 아래 주석 블록을 활성화하고 export 부분을 교체하세요.
 import { NextResponse } from 'next/server';
 
-// 로그인 없이 접근 가능한 경로: /login, /api/auth/*, 정적 파일
+export function middleware() {
+  return NextResponse.next();
+}
+
+export const config = {
+  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+};
+
+/* ───── 활성화 시 사용할 인증 미들웨어 ─────
+import { auth } from '@/auth';
+
 const PUBLIC_PATHS = ['/login'];
 
 export default auth((req) => {
   const { pathname } = req.nextUrl;
 
-  // Auth.js 자체 라우트와 정적 자원은 통과
   if (
     pathname.startsWith('/api/auth') ||
     pathname.startsWith('/_next') ||
@@ -16,12 +26,10 @@ export default auth((req) => {
     return NextResponse.next();
   }
 
-  // 공개 경로는 통과
   if (PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'))) {
     return NextResponse.next();
   }
 
-  // 인증 안 된 사용자는 로그인 페이지로
   if (!req.auth) {
     const loginUrl = req.nextUrl.clone();
     loginUrl.pathname = '/login';
@@ -31,7 +39,4 @@ export default auth((req) => {
 
   return NextResponse.next();
 });
-
-export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
-};
+─────────────────────────────────────────── */
