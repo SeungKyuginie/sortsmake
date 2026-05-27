@@ -123,6 +123,8 @@ export default function VideoMakerPage() {
   const [storeName, setStoreName] = useState('');
   const [photos, setPhotos] = useState<CornerPhoto[]>([]);
   const [duration, setDuration] = useState(30);
+  // 프레임 스타일: cover(꽉 채우기, 현재 동작) / blur(블러 액자 + 풀 가로 패닝)
+  const [frameStyle, setFrameStyle] = useState<'cover' | 'blur'>('cover');
 
   // common voice — Chirp3-HD Leda(발랄/소녀)를 기본값으로
   const [speaker, setSpeaker] = useState('ko-KR-Chirp3-HD-Leda');
@@ -242,7 +244,7 @@ export default function VideoMakerPage() {
     let cancelled = false;
     (async () => {
       const [
-        sStoreName, sDuration, sPhotos,
+        sStoreName, sDuration, sFrameStyle, sPhotos,
         sSpeaker, sRate, sPitch,
         sMultiVoice, sHookVoice, sCtaVoice, sCornerVoices,
         sScript, sVoice,
@@ -251,6 +253,7 @@ export default function VideoMakerPage() {
       ] = await Promise.all([
         loadItem<string>('storeName'),
         loadItem<number>('duration'),
+        loadItem<'cover' | 'blur'>('frameStyle'),
         loadItem<SerializedPhoto[]>('photos'),
         loadItem<string>('speaker'),
         loadItem<number>('speakingRate'),
@@ -271,6 +274,7 @@ export default function VideoMakerPage() {
 
       if (sStoreName) setStoreName(sStoreName);
       if (typeof sDuration === 'number') setDuration(sDuration);
+      if (sFrameStyle === 'cover' || sFrameStyle === 'blur') setFrameStyle(sFrameStyle);
       if (sPhotos && sPhotos.length) {
         setPhotos(
           sPhotos.map((p) => ({
@@ -323,6 +327,7 @@ export default function VideoMakerPage() {
   // 상태 변화 시 자동 저장 (하이드레이션 이후만)
   useEffect(() => { if (hydrated) saveItem('storeName', storeName); }, [hydrated, storeName]);
   useEffect(() => { if (hydrated) saveItem('duration', duration); }, [hydrated, duration]);
+  useEffect(() => { if (hydrated) saveItem('frameStyle', frameStyle); }, [hydrated, frameStyle]);
   useEffect(() => {
     if (!hydrated) return;
     const toSave: SerializedPhoto[] = photos.map((p) => ({
@@ -366,6 +371,7 @@ export default function VideoMakerPage() {
     // 상태 리셋
     setStoreName('');
     setDuration(30);
+    setFrameStyle('cover');
     setPhotos([]);
     setSpeaker('ko-KR-Chirp3-HD-Leda');
     setSpeakingRate(1.1);
@@ -869,9 +875,15 @@ export default function VideoMakerPage() {
         buildRenderTimeline();
       const blob = await renderVideo(
         {
-          items: photos.map((p) => ({ file: p.file, kind: p.kind })),
+          items: photos.map((p) => ({
+            file: p.file,
+            kind: p.kind,
+            width: p.width,
+            height: p.height,
+          })),
           itemDurations,
           droneShots: photos.map((p) => p.droneShot ?? false),
+          frameStyle,
           phrases,
           hookText: script.hook,
           hookStart,
@@ -1006,6 +1018,17 @@ export default function VideoMakerPage() {
                   {d}초
                 </option>
               ))}
+            </select>
+          </div>
+          <div>
+            <label className="label">프레임 스타일</label>
+            <select
+              className="input"
+              value={frameStyle}
+              onChange={(e) => setFrameStyle(e.target.value as 'cover' | 'blur')}
+            >
+              <option value="cover">꽉 채우기 (좌우 패닝 + 확대)</option>
+              <option value="blur">블러 액자 (사진 보존 + 풀 패닝)</option>
             </select>
           </div>
           <div>

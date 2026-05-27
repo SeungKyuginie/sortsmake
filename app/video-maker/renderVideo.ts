@@ -29,7 +29,13 @@ const FONT_CTA = 112;
 // 첫 0~0.8초가 50~60% drop-off 구간 (Opus.pro). 그 안에 text slam.
 const HOOK_SLAM_DURATION = 0.35;
 
-export type RenderItem = { file: File; kind: 'image' | 'video' };
+export type RenderItem = {
+  file: File;
+  kind: 'image' | 'video';
+  // 원본 픽셀 크기 (blur 액자 모드 fit 계산용)
+  width?: number;
+  height?: number;
+};
 
 export type RenderPhrase = {
   text: string;
@@ -42,6 +48,9 @@ export type RenderInput = {
   items: RenderItem[];
   itemDurations: number[]; // sum === audioDurationSec
   droneShots?: boolean[]; // per-item drone shot flag (images only)
+  // 'cover': 사진을 화면에 꽉 채움 (현재 동작, 가로 사진 좌우 패닝)
+  // 'blur': 사진을 살짝만 확대 + 위아래 블러 + 전체 가로 풀 패닝
+  frameStyle?: 'cover' | 'blur';
   phrases: RenderPhrase[]; // 절대 시간 기준 자막 큐
   hookText: string;
   hookStart: number;
@@ -201,7 +210,15 @@ function drawTextNode(opts: DrawTextOpts): string {
 // 이미지: 블러 커버 BG + 컨테인 FG + 한 방향 선형 드리프트 (어지럽지 않은 글라이드).
 // 이미지(드론샷): 블러 커버 BG + 1.3x → 1.0x 풀백 줌아웃 + 미세 드리프트.
 // 비디오: 블러 커버 BG + 컨테인 FG (원본 모션 보존).
-function buildItemChain(idx: number, T: number, isVideo: boolean, droneShot = false): string {
+function buildItemChain(
+  idx: number,
+  T: number,
+  isVideo: boolean,
+  droneShot = false,
+  frameStyle: 'cover' | 'blur' = 'cover',
+  srcWidth?: number,
+  srcHeight?: number,
+): string {
   const Tstr = T.toFixed(3);
 
   if (isVideo) {
@@ -238,10 +255,53 @@ function buildItemChain(idx: number, T: number, isVideo: boolean, droneShot = fa
     );
   }
 
-  // 기본 이미지: 가로 패닝으로 영상 효과
-  // 핵심: 가로 사진의 모든 가로 컨텐츠를 살린 채 좌우로 미끄러짐.
-  // - landscape (>9:16): 높이를 HEIGHT에 맞춤 → 너비가 1080보다 커서 패닝 가능
-  // - portrait (≤9:16): 너비를 WIDTH에 맞춤 → 패닝 폭 없음 (거의 static)
+  // 블러 액자 모드: 사진을 화면 높이의 90%까지만 확대 → 위아래 5% 블러 여백 +
+  // 가로 여유분 전체를 좌→우 풀 패닝으로 보여줌 (사진의 모든 가로 컨텐츠 노출).
+  // 가로 비율(iw/ih > 9/16)일 때만 의미 있음 — 세로/정사각형은 패닝 폭이 0이라
+  // 단순 fit으로 처리 (위아래 큰 블러 액자).
+  if (frameStyle === 'blur' && srcWidth && srcHeight) {
+    const aspect = srcWidth / srcHeight;
+    const canvasAspect = WIDTH / HEIGHT; // 0.5625
+    const fillRatio = 0.9; // 화면 높이의 90%만 사용 → 5% 위, 5% 아래 블러
+    const photoH = Math.round((HEIGHT * fillRatio) / 2) * 2; // 짝수
+    const photoW = Math.round((photoH * aspect) / 2) * 2;
+    const dir = idx % 2 === 0 ? 1 : -1;
+
+    // 가로 사진: photoW > WIDTH → 풀 패닝
+    if (aspect > canvasAspect && photoW > WIDTH) {
+      const panRange = photoW - WIDTH;
+      // dir=1: 왼쪽 끝(0)에서 오른쪽 끝(panRange)으로
+      // dir=-1: 반대
+      const xExpr =
+        dir === 1
+          ? `${panRange}*(t/${Tstr})`
+          : `${panRange}*(1-t/${Tstr})`;
+      const yBlur = Math.round((HEIGHT - photoH) / 2);
+      return (
+        `[${idx}:v]split=2[bg${idx}][fg${idx}];` +
+        `[bg${idx}]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,` +
+        `crop=${WIDTH}:${HEIGHT},boxblur=12:2,setsar=1[bgX${idx}];` +
+        // FG: 사진을 photoW×photoH로 확대 후 가로 crop으로 풀 패닝
+        `[fg${idx}]scale=${photoW}:${photoH},setsar=1,` +
+        `crop=${WIDTH}:${photoH}:'${xExpr}':0[fgX${idx}];` +
+        // FG를 BG 위에 세로 중앙(yBlur)으로 overlay
+        `[bgX${idx}][fgX${idx}]overlay=0:${yBlur},` +
+        `fps=${FPS},format=yuv420p,setpts=PTS-STARTPTS[v${idx}]`
+      );
+    }
+
+    // 세로/정사각형 사진: 패닝 불가, fit + 블러 액자 (정적)
+    return (
+      `[${idx}:v]split=2[bg${idx}][fg${idx}];` +
+      `[bg${idx}]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,` +
+      `crop=${WIDTH}:${HEIGHT},boxblur=12:2,setsar=1[bgX${idx}];` +
+      `[fg${idx}]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=decrease,setsar=1[fgX${idx}];` +
+      `[bgX${idx}][fgX${idx}]overlay=(W-w)/2:(H-h)/2,` +
+      `fps=${FPS},format=yuv420p,setpts=PTS-STARTPTS[v${idx}]`
+    );
+  }
+
+  // 'cover' 모드 (기본): 가로 사진을 화면에 꽉 채우고 좌우 60% 패닝
   const dir = idx % 2 === 0 ? 1 : -1;
   // 사용 가능한 가로 여유의 60% 사용 (가장자리 ±20% 여백 남김)
   const xExpr = `(in_w-${WIDTH})*0.5 + (in_w-${WIDTH})*0.3*${dir}*(2*t/${Tstr}-1)`;
@@ -272,6 +332,7 @@ export async function renderVideo(
     items,
     itemDurations: rawItemDurations,
     droneShots,
+    frameStyle = 'cover',
     phrases,
     hookText,
     hookStart,
@@ -337,7 +398,15 @@ export async function renderVideo(
 
   // 1) 각 항목 체인
   const itemChains = items.map((it, i) =>
-    buildItemChain(i, itemDurations[i], it.kind === 'video', droneShots?.[i] ?? false),
+    buildItemChain(
+      i,
+      itemDurations[i],
+      it.kind === 'video',
+      droneShots?.[i] ?? false,
+      frameStyle,
+      it.width,
+      it.height,
+    ),
   );
 
   // 2) 모두 [concated]으로 concat
