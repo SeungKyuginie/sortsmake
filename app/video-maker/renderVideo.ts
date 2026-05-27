@@ -267,21 +267,24 @@ function buildItemChain(
     const photoW = Math.round((photoH * aspect) / 2) * 2;
     const dir = idx % 2 === 0 ? 1 : -1;
 
-    // 가로 사진: photoW > WIDTH → 풀 패닝
+    // 가로 사진: photoW > WIDTH → 패닝 가능
     if (aspect > canvasAspect && photoW > WIDTH) {
       const panRange = photoW - WIDTH;
-      // dir=1: 왼쪽 끝(0)에서 오른쪽 끝(panRange)으로
-      // dir=-1: 반대
+      // 패닝 범위를 60%만 사용 (양 끝 20%씩 여백) → 속도 ~40% 감소.
+      const usedRange = Math.round(panRange * 0.6);
+      const startOffset = Math.round((panRange - usedRange) / 2);
+      // dir=1: startOffset → startOffset+usedRange (왼쪽에서 오른쪽으로)
+      // dir=-1: 반대 방향
       const xExpr =
         dir === 1
-          ? `${panRange}*(t/${Tstr})`
-          : `${panRange}*(1-t/${Tstr})`;
+          ? `${startOffset} + ${usedRange}*(t/${Tstr})`
+          : `${startOffset + usedRange} - ${usedRange}*(t/${Tstr})`;
       const yBlur = Math.round((HEIGHT - photoH) / 2);
       return (
         `[${idx}:v]split=2[bg${idx}][fg${idx}];` +
         `[bg${idx}]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,` +
         `crop=${WIDTH}:${HEIGHT},boxblur=12:2,setsar=1[bgX${idx}];` +
-        // FG: 사진을 photoW×photoH로 확대 후 가로 crop으로 풀 패닝
+        // FG: 사진을 photoW×photoH로 확대 후 가로 crop으로 패닝
         `[fg${idx}]scale=${photoW}:${photoH},setsar=1,` +
         `crop=${WIDTH}:${photoH}:'${xExpr}':0[fgX${idx}];` +
         // FG를 BG 위에 세로 중앙(yBlur)으로 overlay
