@@ -376,8 +376,12 @@ export async function renderVideo(
   onProgress({ ratio: 0.05, message: '한글 폰트 로딩 중…' });
   const fontFile = await ensureFont(ffmpeg);
 
+  // encodingStarted: 첫 frame progress 이벤트가 발생하면 true. 그 전까지는
+  // setupTimer가 "준비 중" 메시지를 띄움. 첫 progress 후엔 timer 무효화.
+  let encodingStarted = false;
   ffmpeg.on('progress', ({ progress }) => {
     if (Number.isFinite(progress)) {
+      encodingStarted = true;
       const ratio = 0.22 + Math.min(0.76, Math.max(0, progress) * 0.76);
       onProgress({
         ratio,
@@ -567,7 +571,27 @@ export async function renderVideo(
     'out.mp4',
   );
 
-  await ffmpeg.exec(args);
+  // ffmpeg.exec 중 progress 이벤트가 첫 프레임 처리 후에야 발생.
+  // 그 사이(인코더 초기화 + 워커 스핀업) 사용자가 멈춘 줄 알 수 있어 카운터 표시.
+  onProgress({
+    ratio: 0.20,
+    message: '인코더 준비 중… (10~20초 정도 걸려요)',
+  });
+  const startedAt = Date.now();
+  const setupTimer = setInterval(() => {
+    if (encodingStarted) return; // 첫 프레임 인코딩 시작 후엔 진행률 표시에 양보
+    const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+    onProgress({
+      ratio: 0.21,
+      message: `인코더 준비 중… ${elapsed}s 경과`,
+    });
+  }, 1000);
+
+  try {
+    await ffmpeg.exec(args);
+  } finally {
+    clearInterval(setupTimer);
+  }
 
   onProgress({ ratio: 0.98, message: '파일 마무리 중…' });
   const data = (await ffmpeg.readFile('out.mp4')) as Uint8Array;

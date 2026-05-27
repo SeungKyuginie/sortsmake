@@ -34,8 +34,8 @@ async function canvasToJpegBlob(
 // small enough for a typical photo set.
 export async function encodeImageForClaude(
   file: File,
-  maxEdge = 768,
-  quality = 0.7,
+  maxEdge = 1024,
+  quality = 0.85,
 ): Promise<EncodedImage> {
   const bitmap = await createImageBitmap(file);
   const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
@@ -58,8 +58,8 @@ export async function encodeImageForClaude(
 // 다운스케일된 JPEG base64로 반환.
 export async function encodeVideoFirstFrame(
   file: File,
-  maxEdge = 768,
-  quality = 0.7,
+  maxEdge = 1024,
+  quality = 0.85,
 ): Promise<EncodedImage> {
   const url = URL.createObjectURL(file);
   try {
