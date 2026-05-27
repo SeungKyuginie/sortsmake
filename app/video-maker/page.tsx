@@ -641,6 +641,7 @@ export default function VideoMakerPage() {
         body: JSON.stringify({
           storeName,
           durationSeconds: duration,
+          speakingRate,
           corners: encoded,
         }),
       });
