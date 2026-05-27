@@ -687,15 +687,28 @@ export default function VideoMakerPage() {
       blobs.push(ctaResult.blob);
 
       const audioBlob = new Blob(blobs, { type: 'audio/mpeg' });
-      const totalDur =
+      const summedDur =
         hookResult.dur + cornerDurs.reduce((a, b) => a + b, 0) + ctaResult.dur;
+      // MP3 단순 concat 시 합본 길이가 개별 합보다 살짝 길어질 수 있음.
+      // 실제 길이를 다시 측정해 누락분을 ctaDur에 흡수 → 영상이 음성보다 먼저 끝나는 문제 방지.
+      let totalDur = summedDur;
+      let ctaDur = ctaResult.dur;
+      try {
+        const actualTotal = await probeAudioDuration(audioBlob);
+        if (actualTotal > summedDur + 0.001) {
+          ctaDur += actualTotal - summedDur;
+          totalDur = actualTotal;
+        }
+      } catch {
+        /* probe 실패 시 summed 값 사용 */
+      }
 
       setVoice({
         audioBlob,
         totalDur,
         hookDur: hookResult.dur,
         cornerDurs,
-        ctaDur: ctaResult.dur,
+        ctaDur,
       });
       setVideoBlob(null);
       setStep('voice', {

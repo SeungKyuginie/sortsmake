@@ -270,7 +270,7 @@ export async function renderVideo(
 ): Promise<Blob> {
   const {
     items,
-    itemDurations,
+    itemDurations: rawItemDurations,
     droneShots,
     phrases,
     hookText,
@@ -287,10 +287,16 @@ export async function renderVideo(
   } = input;
 
   if (items.length === 0) throw new Error('업로드된 미디어가 없습니다.');
-  if (items.length !== itemDurations.length)
+  if (items.length !== rawItemDurations.length)
     throw new Error('itemDurations 길이가 items와 다릅니다.');
   if (!audioDurationSec || audioDurationSec <= 0)
     throw new Error('오디오 길이를 알 수 없습니다.');
+
+  // 마지막 아이템에 0.3초 안전 버퍼 — frame 양자화/MP3 concat 오차로 영상이 음성보다
+  // 먼저 끝나는 것 방지. -shortest 옵션이 음성 길이에 맞춰 다시 잘라줌.
+  const itemDurations = rawItemDurations.map((d, i) =>
+    i === rawItemDurations.length - 1 ? d + 0.3 : d,
+  );
 
   onProgress({ ratio: 0.02, message: 'FFmpeg 초기화 중…' });
   const ffmpeg = await getFFmpeg();
