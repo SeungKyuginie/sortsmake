@@ -51,6 +51,8 @@ export type RenderInput = {
   // 'cover': 사진을 화면에 꽉 채움 (현재 동작, 가로 사진 좌우 패닝)
   // 'blur': 사진을 살짝만 확대 + 위아래 블러 + 전체 가로 풀 패닝
   frameStyle?: 'cover' | 'blur';
+  // 패닝 범위 비율 (0=정적, 1=양끝까지). cover/blur 모두에 적용.
+  panRatio?: number;
   phrases: RenderPhrase[]; // 절대 시간 기준 자막 큐
   hookText: string;
   hookStart: number;
@@ -218,6 +220,7 @@ function buildItemChain(
   frameStyle: 'cover' | 'blur' = 'cover',
   srcWidth?: number,
   srcHeight?: number,
+  panRatio = 0.6,
 ): string {
   const Tstr = T.toFixed(3);
 
@@ -270,8 +273,8 @@ function buildItemChain(
     // 가로 사진: photoW > WIDTH → 패닝 가능
     if (aspect > canvasAspect && photoW > WIDTH) {
       const panRange = photoW - WIDTH;
-      // 패닝 범위를 60%만 사용 (양 끝 20%씩 여백) → 속도 ~40% 감소.
-      const usedRange = Math.round(panRange * 0.6);
+      // panRatio (0~1) 만큼만 사용 (나머지는 양쪽 여백)
+      const usedRange = Math.round(panRange * panRatio);
       const startOffset = Math.round((panRange - usedRange) / 2);
       // dir=1: startOffset → startOffset+usedRange (왼쪽에서 오른쪽으로)
       // dir=-1: 반대 방향
@@ -304,10 +307,11 @@ function buildItemChain(
     );
   }
 
-  // 'cover' 모드 (기본): 가로 사진을 화면에 꽉 채우고 좌우 60% 패닝
+  // 'cover' 모드 (기본): 가로 사진을 화면에 꽉 채우고 좌우 panRatio 만큼 패닝.
+  // amplitude = panRatio / 2 (총 panRatio 폭, 중앙 기준 ±)
   const dir = idx % 2 === 0 ? 1 : -1;
-  // 사용 가능한 가로 여유의 60% 사용 (가장자리 ±20% 여백 남김)
-  const xExpr = `(in_w-${WIDTH})*0.5 + (in_w-${WIDTH})*0.3*${dir}*(2*t/${Tstr}-1)`;
+  const halfAmp = (panRatio / 2).toFixed(4);
+  const xExpr = `(in_w-${WIDTH})*0.5 + (in_w-${WIDTH})*${halfAmp}*${dir}*(2*t/${Tstr}-1)`;
   const yExpr = `(in_h-${HEIGHT})/2`;
   // aspect threshold = WIDTH/HEIGHT = 0.5625 (9:16)
   // 콤마는 expression 안에서 \, 로 escape
@@ -336,6 +340,7 @@ export async function renderVideo(
     itemDurations: rawItemDurations,
     droneShots,
     frameStyle = 'cover',
+    panRatio = 0.6,
     phrases,
     hookText,
     hookStart,
@@ -399,6 +404,9 @@ export async function renderVideo(
 
   onProgress({ ratio: 0.18, message: '필터 그래프 구성 중…' });
 
+  // panRatio 안전 범위 [0, 1]
+  const safePan = Math.min(1, Math.max(0, panRatio));
+
   // 1) 각 항목 체인
   const itemChains = items.map((it, i) =>
     buildItemChain(
@@ -409,6 +417,7 @@ export async function renderVideo(
       frameStyle,
       it.width,
       it.height,
+      safePan,
     ),
   );
 

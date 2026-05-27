@@ -125,6 +125,8 @@ export default function VideoMakerPage() {
   const [duration, setDuration] = useState(30);
   // 프레임 스타일: cover(꽉 채우기, 현재 동작) / blur(블러 액자 + 풀 가로 패닝)
   const [frameStyle, setFrameStyle] = useState<'cover' | 'blur'>('cover');
+  // 패닝 속도: 0(정적) ~ 1(최대) — cover/blur 모드 공통
+  const [panRatio, setPanRatio] = useState(0.6);
 
   // common voice — Chirp3-HD Leda(발랄/소녀)를 기본값으로
   const [speaker, setSpeaker] = useState('ko-KR-Chirp3-HD-Leda');
@@ -244,7 +246,7 @@ export default function VideoMakerPage() {
     let cancelled = false;
     (async () => {
       const [
-        sStoreName, sDuration, sFrameStyle, sPhotos,
+        sStoreName, sDuration, sFrameStyle, sPanRatio, sPhotos,
         sSpeaker, sRate, sPitch,
         sMultiVoice, sHookVoice, sCtaVoice, sCornerVoices,
         sScript, sVoice,
@@ -254,6 +256,7 @@ export default function VideoMakerPage() {
         loadItem<string>('storeName'),
         loadItem<number>('duration'),
         loadItem<'cover' | 'blur'>('frameStyle'),
+        loadItem<number>('panRatio'),
         loadItem<SerializedPhoto[]>('photos'),
         loadItem<string>('speaker'),
         loadItem<number>('speakingRate'),
@@ -275,6 +278,7 @@ export default function VideoMakerPage() {
       if (sStoreName) setStoreName(sStoreName);
       if (typeof sDuration === 'number') setDuration(sDuration);
       if (sFrameStyle === 'cover' || sFrameStyle === 'blur') setFrameStyle(sFrameStyle);
+      if (typeof sPanRatio === 'number' && sPanRatio >= 0 && sPanRatio <= 1) setPanRatio(sPanRatio);
       if (sPhotos && sPhotos.length) {
         setPhotos(
           sPhotos.map((p) => ({
@@ -328,6 +332,7 @@ export default function VideoMakerPage() {
   useEffect(() => { if (hydrated) saveItem('storeName', storeName); }, [hydrated, storeName]);
   useEffect(() => { if (hydrated) saveItem('duration', duration); }, [hydrated, duration]);
   useEffect(() => { if (hydrated) saveItem('frameStyle', frameStyle); }, [hydrated, frameStyle]);
+  useEffect(() => { if (hydrated) saveItem('panRatio', panRatio); }, [hydrated, panRatio]);
   useEffect(() => {
     if (!hydrated) return;
     const toSave: SerializedPhoto[] = photos.map((p) => ({
@@ -372,6 +377,7 @@ export default function VideoMakerPage() {
     setStoreName('');
     setDuration(30);
     setFrameStyle('cover');
+    setPanRatio(0.6);
     setPhotos([]);
     setSpeaker('ko-KR-Chirp3-HD-Leda');
     setSpeakingRate(1.1);
@@ -884,6 +890,7 @@ export default function VideoMakerPage() {
           itemDurations,
           droneShots: photos.map((p) => p.droneShot ?? false),
           frameStyle,
+          panRatio,
           phrases,
           hookText: script.hook,
           hookStart,
@@ -1029,6 +1036,21 @@ export default function VideoMakerPage() {
             >
               <option value="cover">꽉 채우기 (좌우 패닝 + 확대)</option>
               <option value="blur">블러 액자 (사진 보존 + 풀 패닝)</option>
+            </select>
+          </div>
+          <div>
+            <label className="label">패닝 속도</label>
+            <select
+              className="input"
+              value={panRatio}
+              onChange={(e) => setPanRatio(Number(e.target.value))}
+            >
+              <option value={0}>정적 (움직임 없음)</option>
+              <option value={0.3}>매우 느림</option>
+              <option value={0.45}>느림</option>
+              <option value={0.6}>보통 (기본)</option>
+              <option value={0.8}>빠름</option>
+              <option value={1}>매우 빠름 (사진 양끝까지)</option>
             </select>
           </div>
           <div>
