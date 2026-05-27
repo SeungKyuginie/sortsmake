@@ -392,15 +392,54 @@ export default function VideoMakerPage() {
   };
 
   // ---------- 사진 핸들러 ----------
-  const onAdd = (files: File[]) => {
-    const newOnes: CornerPhoto[] = files.map((f) => ({
-      id: uid(),
-      file: f,
-      previewUrl: URL.createObjectURL(f),
-      kind: f.type.startsWith('video/') ? 'video' : 'image',
-      cornerName: '',
-      description: '',
-    }));
+  const probeMediaSize = async (
+    file: File,
+    kind: 'image' | 'video',
+  ): Promise<{ width?: number; height?: number }> => {
+    try {
+      if (kind === 'image') {
+        const bmp = await createImageBitmap(file);
+        const dim = { width: bmp.width, height: bmp.height };
+        bmp.close?.();
+        return dim;
+      }
+      // video — load metadata to read videoWidth/videoHeight
+      const url = URL.createObjectURL(file);
+      try {
+        const v = document.createElement('video');
+        v.src = url;
+        v.preload = 'metadata';
+        v.muted = true;
+        await new Promise<void>((resolve, reject) => {
+          v.addEventListener('loadedmetadata', () => resolve(), { once: true });
+          v.addEventListener('error', () => reject(new Error('video probe failed')), { once: true });
+        });
+        return { width: v.videoWidth, height: v.videoHeight };
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    } catch {
+      return {};
+    }
+  };
+
+  const onAdd = async (files: File[]) => {
+    const newOnes: CornerPhoto[] = await Promise.all(
+      files.map(async (f) => {
+        const kind: 'image' | 'video' = f.type.startsWith('video/') ? 'video' : 'image';
+        const dim = await probeMediaSize(f, kind);
+        return {
+          id: uid(),
+          file: f,
+          previewUrl: URL.createObjectURL(f),
+          kind,
+          cornerName: '',
+          description: '',
+          width: dim.width,
+          height: dim.height,
+        };
+      }),
+    );
     setPhotos((p) => [...p, ...newOnes]);
   };
   const onUpdate = (id: string, patch: Partial<CornerPhoto>) => {

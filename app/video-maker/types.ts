@@ -6,6 +6,9 @@ export type CornerPhoto = {
   cornerName: string;
   description: string;
   droneShot?: boolean;
+  // 원본 픽셀 크기 (블러 액자 모드용 fit 계산)
+  width?: number;
+  height?: number;
   // AI 드론 영상 생성 상태
   droneAiStatus?: 'idle' | 'generating' | 'ready' | 'error';
   droneAiError?: string;
