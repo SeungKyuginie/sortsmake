@@ -3,7 +3,9 @@
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile, toBlobURL } from '@ffmpeg/util';
 
-const FFMPEG_BASE = 'https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd';
+// 멀티 스레드 빌드 (core-mt). 모든 CPU 코어 활용 → 렌더링 2~4배 빨라짐.
+// SharedArrayBuffer 필요 → next.config.js의 COOP/COEP 헤더 필수 (이미 설정됨).
+const FFMPEG_BASE = 'https://unpkg.com/@ffmpeg/core-mt@0.12.10/dist/umd';
 // 한글 지원 + 임팩트가 큰 Pretendard Black. ffmpeg drawtext에 직접 로드.
 const FONT_URL =
   'https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/packages/pretendard/dist/public/static/Pretendard-Black.otf';
@@ -79,6 +81,7 @@ async function getFFmpeg(onLog?: (msg: string) => void): Promise<FFmpeg> {
   await ffmpeg.load({
     coreURL: await toBlobURL(`${FFMPEG_BASE}/ffmpeg-core.js`, 'text/javascript'),
     wasmURL: await toBlobURL(`${FFMPEG_BASE}/ffmpeg-core.wasm`, 'application/wasm'),
+    workerURL: await toBlobURL(`${FFMPEG_BASE}/ffmpeg-core.worker.js`, 'text/javascript'),
   });
   ffmpegSingleton = ffmpeg;
   return ffmpeg;
