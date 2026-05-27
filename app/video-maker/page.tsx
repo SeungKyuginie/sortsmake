@@ -960,7 +960,9 @@ export default function VideoMakerPage() {
   const elapsed = renderStartedAt ? (Date.now() - renderStartedAt) / 1000 : 0;
   const etaRemain = (() => {
     if (!rendering || !renderStartedAt) return null;
-    if (renderRatio > 0.05) {
+    // 인코딩이 실제로 시작된 이후(>=0.22)에만 ETA 계산. 그 전 단계의 ratio는
+    // 임의 값이라 ETA가 misleading 함.
+    if (renderRatio >= 0.22) {
       const projected = elapsed / renderRatio;
       return Math.max(1, Math.ceil(projected - elapsed));
     }
@@ -1485,7 +1487,10 @@ export default function VideoMakerPage() {
             <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-600">
               <span>{renderMessage}</span>
               <span>
-                {(renderRatio * 100).toFixed(0)}% ·{' '}
+                {/* 인코딩 실제 시작 전(<0.22)에는 % 표시 숨김 — 가짜 진행률이라 misleading */}
+                {renderRatio >= 0.22
+                  ? `${(renderRatio * 100).toFixed(0)}% · `
+                  : ''}
                 {rendering
                   ? `경과 ${Math.floor(elapsed)}s${etaRemain != null ? ` · 남은 ~${etaRemain}s` : ''}`
                   : '완료'}

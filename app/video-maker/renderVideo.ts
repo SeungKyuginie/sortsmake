@@ -3,9 +3,9 @@
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile, toBlobURL } from '@ffmpeg/util';
 
-// 멀티 스레드 빌드 (core-mt). 모든 CPU 코어 활용 → 렌더링 2~4배 빨라짐.
-// SharedArrayBuffer 필요 → next.config.js의 COOP/COEP 헤더 필수 (이미 설정됨).
-const FFMPEG_BASE = 'https://unpkg.com/@ffmpeg/core-mt@0.12.10/dist/umd';
+// 싱글 스레드 빌드 — 복잡한 필터 그래프(블러 액자 + 많은 코너)에서는
+// 멀티 스레드의 워커 초기화/필터 분배 비용이 인코딩 이득보다 커서 더 느림.
+const FFMPEG_BASE = 'https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd';
 // 한글 지원 + 임팩트가 큰 Pretendard Black. ffmpeg drawtext에 직접 로드.
 const FONT_URL =
   'https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/packages/pretendard/dist/public/static/Pretendard-Black.otf';
@@ -81,7 +81,6 @@ async function getFFmpeg(onLog?: (msg: string) => void): Promise<FFmpeg> {
   await ffmpeg.load({
     coreURL: await toBlobURL(`${FFMPEG_BASE}/ffmpeg-core.js`, 'text/javascript'),
     wasmURL: await toBlobURL(`${FFMPEG_BASE}/ffmpeg-core.wasm`, 'application/wasm'),
-    workerURL: await toBlobURL(`${FFMPEG_BASE}/ffmpeg-core.worker.js`, 'text/javascript'),
   });
   ffmpegSingleton = ffmpeg;
   return ffmpeg;
@@ -572,18 +571,19 @@ export async function renderVideo(
   );
 
   // ffmpeg.exec 중 progress 이벤트가 첫 프레임 처리 후에야 발생.
-  // 그 사이(인코더 초기화 + 워커 스핀업) 사용자가 멈춘 줄 알 수 있어 카운터 표시.
+  // 가짜 진행률은 보여주지 않고, 경과 시간만 정직하게 카운팅.
+  // ratio는 그대로 0.20에 묶어 두어 진행 바가 가짜로 늘어나지 않게 함.
   onProgress({
     ratio: 0.20,
-    message: '인코더 준비 중… (10~20초 정도 걸려요)',
+    message: '인코더 초기화 중… 첫 프레임 인코딩 시작 대기',
   });
   const startedAt = Date.now();
   const setupTimer = setInterval(() => {
-    if (encodingStarted) return; // 첫 프레임 인코딩 시작 후엔 진행률 표시에 양보
+    if (encodingStarted) return; // 첫 프레임 인코딩 시작 후엔 정식 진행률에 양보
     const elapsed = Math.floor((Date.now() - startedAt) / 1000);
     onProgress({
-      ratio: 0.21,
-      message: `인코더 준비 중… ${elapsed}s 경과`,
+      ratio: 0.20, // 진행 바는 그대로 — 가짜 % 표시 금지
+      message: `인코더 초기화 중… (${elapsed}s 경과, 곧 인코딩 시작)`,
     });
   }, 1000);
 
