@@ -127,6 +127,8 @@ export default function VideoMakerPage() {
   const [frameStyle, setFrameStyle] = useState<'cover' | 'blur'>('cover');
   // 패닝 속도: 0(정적) ~ 1(최대) — cover/blur 모드 공통
   const [panRatio, setPanRatio] = useState(0.6);
+  // 출력 해상도: 1080p(고품질) / 720p(빠른 렌더링, 작은 파일)
+  const [resolution, setResolution] = useState<'1080p' | '720p'>('1080p');
 
   // common voice — Chirp3-HD Leda(발랄/소녀)를 기본값으로
   const [speaker, setSpeaker] = useState('ko-KR-Chirp3-HD-Leda');
@@ -246,7 +248,7 @@ export default function VideoMakerPage() {
     let cancelled = false;
     (async () => {
       const [
-        sStoreName, sDuration, sFrameStyle, sPanRatio, sPhotos,
+        sStoreName, sDuration, sFrameStyle, sPanRatio, sResolution, sPhotos,
         sSpeaker, sRate, sPitch,
         sMultiVoice, sHookVoice, sCtaVoice, sCornerVoices,
         sScript, sVoice,
@@ -257,6 +259,7 @@ export default function VideoMakerPage() {
         loadItem<number>('duration'),
         loadItem<'cover' | 'blur'>('frameStyle'),
         loadItem<number>('panRatio'),
+        loadItem<'1080p' | '720p'>('resolution'),
         loadItem<SerializedPhoto[]>('photos'),
         loadItem<string>('speaker'),
         loadItem<number>('speakingRate'),
@@ -279,6 +282,7 @@ export default function VideoMakerPage() {
       if (typeof sDuration === 'number') setDuration(sDuration);
       if (sFrameStyle === 'cover' || sFrameStyle === 'blur') setFrameStyle(sFrameStyle);
       if (typeof sPanRatio === 'number' && sPanRatio >= 0 && sPanRatio <= 1) setPanRatio(sPanRatio);
+      if (sResolution === '1080p' || sResolution === '720p') setResolution(sResolution);
       if (sPhotos && sPhotos.length) {
         setPhotos(
           sPhotos.map((p) => ({
@@ -333,6 +337,7 @@ export default function VideoMakerPage() {
   useEffect(() => { if (hydrated) saveItem('duration', duration); }, [hydrated, duration]);
   useEffect(() => { if (hydrated) saveItem('frameStyle', frameStyle); }, [hydrated, frameStyle]);
   useEffect(() => { if (hydrated) saveItem('panRatio', panRatio); }, [hydrated, panRatio]);
+  useEffect(() => { if (hydrated) saveItem('resolution', resolution); }, [hydrated, resolution]);
   useEffect(() => {
     if (!hydrated) return;
     const toSave: SerializedPhoto[] = photos.map((p) => ({
@@ -378,6 +383,7 @@ export default function VideoMakerPage() {
     setDuration(30);
     setFrameStyle('cover');
     setPanRatio(0.6);
+    setResolution('1080p');
     setPhotos([]);
     setSpeaker('ko-KR-Chirp3-HD-Leda');
     setSpeakingRate(1.1);
@@ -892,6 +898,7 @@ export default function VideoMakerPage() {
           droneShots: photos.map((p) => p.droneShot ?? false),
           frameStyle,
           panRatio,
+          resolution,
           phrases,
           hookText: script.hook,
           hookStart,
@@ -1054,6 +1061,17 @@ export default function VideoMakerPage() {
               <option value={0.6}>보통 (기본)</option>
               <option value={0.8}>빠름</option>
               <option value={1}>매우 빠름 (사진 양끝까지)</option>
+            </select>
+          </div>
+          <div>
+            <label className="label">출력 해상도</label>
+            <select
+              className="input"
+              value={resolution}
+              onChange={(e) => setResolution(e.target.value as '1080p' | '720p')}
+            >
+              <option value="1080p">1080p (풀 HD, 기본)</option>
+              <option value="720p">720p (빠른 렌더링, 작은 파일)</option>
             </select>
           </div>
           <div>

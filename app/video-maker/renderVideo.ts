@@ -55,6 +55,8 @@ export type RenderInput = {
   frameStyle?: 'cover' | 'blur';
   // 패닝 범위 비율 (0=정적, 1=양끝까지). cover/blur 모두에 적용.
   panRatio?: number;
+  // 출력 해상도: '1080p' = 1080×1920 (기본), '720p' = 720×1280 (빠른 인코딩 + 작은 파일)
+  resolution?: '1080p' | '720p';
   phrases: RenderPhrase[]; // 절대 시간 기준 자막 큐
   hookText: string;
   hookStart: number;
@@ -343,6 +345,7 @@ export async function renderVideo(
     droneShots,
     frameStyle = 'cover',
     panRatio = 0.6,
+    resolution = '1080p',
     phrases,
     hookText,
     hookStart,
@@ -557,6 +560,13 @@ export async function renderVideo(
     'yuv420p',
     '-r',
     String(FPS),
+  );
+  // 720p 선택 시 출력 해상도 강제 다운스케일 → 인코딩 속도 ↑ + 파일 크기 ↓.
+  // 필터는 1080×1920에서 처리되고 마지막 출력만 720×1280으로 줄임.
+  if (resolution === '720p') {
+    args.push('-s', '720x1280');
+  }
+  args.push(
     '-c:a',
     'aac',
     '-b:a',
