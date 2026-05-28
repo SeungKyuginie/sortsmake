@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { encodeImageForClaude, encodeVideoFirstFrame } from './encodeImage';
+import { BgmLibrary } from './BgmLibrary';
 import { PhotoUploader } from './PhotoUploader';
 import { StepIndicator } from './StepIndicator';
 import { VoicePreviewButton } from './VoicePreviewButton';
@@ -189,7 +190,7 @@ export default function VideoMakerPage() {
   );
 
   // step 3-2: BGM
-  const [bgmMode, setBgmMode] = useState<'upload' | 'ai'>('upload');
+  const [bgmMode, setBgmMode] = useState<'library' | 'upload' | 'ai'>('library');
   const [bgmFile, setBgmFile] = useState<File | null>(null);
   const [bgmVolume, setBgmVolume] = useState(0.16);
   const [bgmPrompt, setBgmPrompt] = useState(
@@ -274,7 +275,7 @@ export default function VideoMakerPage() {
         loadItem<(string | undefined)[]>('cornerVoices'),
         loadItem<ShortsScript>('script'),
         loadItem<VoiceTimeline>('voice'),
-        loadItem<'upload' | 'ai'>('bgmMode'),
+        loadItem<'library' | 'upload' | 'ai'>('bgmMode'),
         loadItem<File>('bgmFile'),
         loadItem<number>('bgmVolume'),
         loadItem<string>('bgmPrompt'),
@@ -1364,6 +1365,13 @@ export default function VideoMakerPage() {
           <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1 text-xs">
             <button
               type="button"
+              className={`rounded-md px-3 py-1.5 font-medium ${bgmMode === 'library' ? 'bg-white shadow text-gray-900' : 'text-gray-500'}`}
+              onClick={() => setBgmMode('library')}
+            >
+              🎵 라이브러리
+            </button>
+            <button
+              type="button"
               className={`rounded-md px-3 py-1.5 font-medium ${bgmMode === 'upload' ? 'bg-white shadow text-gray-900' : 'text-gray-500'}`}
               onClick={() => setBgmMode('upload')}
             >
@@ -1379,7 +1387,26 @@ export default function VideoMakerPage() {
           </div>
         </div>
 
-        {bgmMode === 'upload' ? (
+        {bgmMode === 'library' ? (
+          <BgmLibrary
+            currentName={bgmFile?.name}
+            onSelect={async (track) => {
+              setBgmError(null);
+              try {
+                const res = await fetch(track.file);
+                if (!res.ok) throw new Error(`음악 파일을 찾을 수 없습니다 (${res.status})`);
+                const blob = await res.blob();
+                const ext = track.file.split('.').pop() || 'mp3';
+                const file = new File([blob], `${track.id}.${ext}`, {
+                  type: blob.type || 'audio/mpeg',
+                });
+                setBgmFile(file);
+              } catch (e) {
+                setBgmError(e instanceof Error ? e.message : String(e));
+              }
+            }}
+          />
+        ) : bgmMode === 'upload' ? (
           <div className="space-y-3">
             <div className="flex items-center gap-2">
               <label className="btn-secondary cursor-pointer">
