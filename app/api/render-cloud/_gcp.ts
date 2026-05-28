@@ -13,21 +13,42 @@ type ServiceAccountKey = {
 
 let cachedKey: ServiceAccountKey | null = null;
 
-function getServiceAccountKey(): ServiceAccountKey {
+function normalizePrivateKey(pk: string): string {
+  // Vercel 환경 변수에서 JSON으로 보낸 후 private_key의 줄바꿈이
+  // 리터럴 "\n" 으로 들어오면 실제 줄바꿈으로 치환.
+  if (pk.includes('\\n')) {
+    pk = pk.replace(/\\n/g, '\n');
+  }
+  return pk.trim();
+}
+
+export function getServiceAccountKey(): ServiceAccountKey {
   if (cachedKey) return cachedKey;
   const raw = process.env.GCP_SERVICE_ACCOUNT_KEY;
   if (!raw) {
     throw new Error('GCP_SERVICE_ACCOUNT_KEY가 설정되지 않았습니다.');
   }
+  let parsed: ServiceAccountKey;
   try {
-    cachedKey = JSON.parse(raw) as ServiceAccountKey;
-    if (!cachedKey.client_email || !cachedKey.private_key) {
-      throw new Error('Invalid SA key shape');
-    }
-    return cachedKey;
+    parsed = JSON.parse(raw) as ServiceAccountKey;
   } catch (err) {
     throw new Error(`GCP_SERVICE_ACCOUNT_KEY 파싱 실패: ${(err as Error).message}`);
   }
+  if (!parsed.client_email) {
+    throw new Error('서비스 계정 키에 client_email 누락');
+  }
+  if (!parsed.private_key) {
+    throw new Error('서비스 계정 키에 private_key 누락');
+  }
+  parsed.private_key = normalizePrivateKey(parsed.private_key);
+  if (!parsed.private_key.includes('BEGIN PRIVATE KEY')) {
+    throw new Error('private_key가 유효한 PEM 형식이 아닙니다 (BEGIN PRIVATE KEY 마커 없음)');
+  }
+  if (!parsed.private_key.includes('END PRIVATE KEY')) {
+    throw new Error('private_key가 잘려 있습니다 (END PRIVATE KEY 마커 없음)');
+  }
+  cachedKey = parsed;
+  return parsed;
 }
 
 let cachedStorage: Storage | null = null;
@@ -57,7 +78,6 @@ export function getCloudRunUrl(): string {
 }
 
 // Cloud Run에 인증된 요청을 보내기 위한 OIDC 토큰 발급.
-// Cloud Run은 audience = service URL 이어야 함.
 export async function getCloudRunIdToken(targetUrl: string): Promise<string> {
   const key = getServiceAccountKey();
   const auth = new GoogleAuth({
