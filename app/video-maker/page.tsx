@@ -488,140 +488,25 @@ export default function VideoMakerPage() {
     });
   };
 
-  // AI 드론샷 영상 생성 (Luma Dream Machine)
-  const onGenerateDrone = async (id: string) => {
-    const target = photos.find((p) => p.id === id);
-    if (!target || target.kind !== 'image') return;
-
+  // 드론샷 토글 ON — ffmpeg 줌아웃 효과 적용
+  const onGenerateDrone = (id: string) => {
     setPhotos((p) =>
       p.map((x) =>
-        x.id === id
-          ? { ...x, droneAiStatus: 'generating', droneAiError: undefined }
+        x.id === id && x.kind === 'image'
+          ? { ...x, droneShot: true, droneAiStatus: 'ready', droneAiError: undefined }
           : x,
       ),
     );
-
-    try {
-      const { base64, mediaType } = await encodeImageForClaude(target.file);
-      const cornerHint = [target.cornerName, target.description]
-        .filter(Boolean)
-        .join(' / ');
-
-      // 1) 생성 시작
-      const startRes = await fetch('/api/generate-drone-clip', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageBase64: base64, mediaType, cornerHint }),
-      });
-      if (!startRes.ok) {
-        const data = (await startRes.json().catch(() => ({}))) as {
-          error?: string;
-          keyHint?: string;
-        };
-        const base = data.error || `드론 생성 시작 실패 (${startRes.status})`;
-        throw new Error(data.keyHint ? `${base} [key=${data.keyHint}]` : base);
-      }
-      const { generationId } = (await startRes.json()) as {
-        generationId: string;
-      };
-
-      // 2) 폴링 — Luma는 30~90초 정도 걸림. 5초 간격으로 최대 3분.
-      const maxAttempts = 36;
-      const intervalMs = 5000;
-      let videoUrl: string | null = null;
-      for (let attempt = 0; attempt < maxAttempts; attempt++) {
-        await new Promise((r) => setTimeout(r, intervalMs));
-        const statusRes = await fetch(
-          `/api/generate-drone-clip/status?id=${encodeURIComponent(generationId)}`,
-        );
-        if (!statusRes.ok) {
-          const data = await statusRes.json().catch(() => ({}));
-          throw new Error(data.error || `상태 조회 실패 (${statusRes.status})`);
-        }
-        const status = (await statusRes.json()) as {
-          state: string;
-          videoUrl: string | null;
-          failureReason: string | null;
-        };
-        if (status.state === 'completed' && status.videoUrl) {
-          videoUrl = status.videoUrl;
-          break;
-        }
-        if (status.state === 'failed') {
-          throw new Error(status.failureReason || 'Luma 생성 실패');
-        }
-        // queued / dreaming 이면 계속 대기
-      }
-
-      if (!videoUrl) {
-        throw new Error('생성 시간 초과 (3분). 다시 시도해 주세요.');
-      }
-
-      // 3) Luma가 제공한 URL에서 영상 다운로드
-      const videoRes = await fetch(videoUrl);
-      if (!videoRes.ok)
-        throw new Error(`영상 다운로드 실패 (${videoRes.status})`);
-      const videoBlob = await videoRes.blob();
-      const videoFile = new File(
-        [videoBlob],
-        `drone-${target.id}-${Date.now()}.mp4`,
-        { type: 'video/mp4' },
-      );
-      const localUrl = URL.createObjectURL(videoFile);
-
-      setPhotos((p) =>
-        p.map((x) =>
-          x.id === id
-            ? {
-                ...x,
-                originalFile: x.originalFile ?? x.file,
-                originalPreviewUrl: x.originalPreviewUrl ?? x.previewUrl,
-                originalKind: x.originalKind ?? x.kind,
-                file: videoFile,
-                previewUrl: localUrl,
-                kind: 'video',
-                droneShot: true,
-                droneAiStatus: 'ready',
-                droneAiError: undefined,
-              }
-            : x,
-        ),
-      );
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'AI 드론 생성 실패';
-      setPhotos((p) =>
-        p.map((x) =>
-          x.id === id
-            ? { ...x, droneAiStatus: 'error', droneAiError: msg }
-            : x,
-        ),
-      );
-    }
   };
 
-  // AI 드론샷 취소 — 원본 사진으로 되돌리기
+  // 드론샷 토글 OFF
   const onCancelDrone = (id: string) => {
     setPhotos((p) =>
-      p.map((x) => {
-        if (x.id !== id) return x;
-        if (!x.originalFile || !x.originalPreviewUrl) return x;
-        // 현재 AI 영상 URL은 해제
-        if (x.previewUrl !== x.originalPreviewUrl) {
-          URL.revokeObjectURL(x.previewUrl);
-        }
-        return {
-          ...x,
-          file: x.originalFile,
-          previewUrl: x.originalPreviewUrl,
-          kind: x.originalKind ?? 'image',
-          droneShot: false,
-          droneAiStatus: 'idle',
-          droneAiError: undefined,
-          originalFile: undefined,
-          originalPreviewUrl: undefined,
-          originalKind: undefined,
-        };
-      }),
+      p.map((x) =>
+        x.id === id
+          ? { ...x, droneShot: false, droneAiStatus: 'idle', droneAiError: undefined }
+          : x,
+      ),
     );
   };
 

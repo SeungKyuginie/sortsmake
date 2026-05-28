@@ -86,31 +86,24 @@ export function PhotoUploader({
                       #{idx + 1} {p.kind === 'video' ? '🎬 영상' : '🖼 사진'}
                     </span>
                     <div className="flex items-center gap-1">
-                      {p.kind === 'image' && p.droneAiStatus !== 'ready' && (
+                      {p.kind === 'image' && !p.droneShot && (
                         <button
                           type="button"
-                          title="AI로 드론 항공샷 영상 생성 (Stable Video Diffusion)"
-                          disabled={p.droneAiStatus === 'generating'}
-                          className={`px-2 py-1 text-xs rounded border font-medium transition-colors ${
-                            p.droneAiStatus === 'generating'
-                              ? 'bg-gray-200 text-gray-500 border-gray-300 cursor-wait'
-                              : 'btn-secondary'
-                          }`}
+                          title="드론샷 효과 적용 (사진을 위에서 줌아웃)"
+                          className="btn-secondary px-2 py-1 text-xs"
                           onClick={() => onGenerateDrone?.(p.id)}
                         >
-                          {p.droneAiStatus === 'generating'
-                            ? '🚁 생성 중…'
-                            : '🚁 AI 드론'}
+                          🚁 드론샷
                         </button>
                       )}
-                      {p.droneAiStatus === 'ready' && (
+                      {p.kind === 'image' && p.droneShot && (
                         <button
                           type="button"
-                          title="원본 사진으로 되돌리기"
+                          title="드론샷 효과 끄기"
                           className="px-2 py-1 text-xs rounded border font-medium bg-sky-500 text-white border-sky-500"
                           onClick={() => onCancelDrone?.(p.id)}
                         >
-                          🚁 AI 적용됨
+                          🚁 드론샷 ON
                         </button>
                       )}
                       <button
@@ -160,11 +153,6 @@ export function PhotoUploader({
                       }
                     />
                   </div>
-                  {p.droneAiError ? (
-                    <div className="rounded-md bg-red-50 border border-red-200 p-2 text-xs text-red-700">
-                      AI 드론샷 실패: {p.droneAiError}
-                    </div>
-                  ) : null}
                 </div>
               </div>
             </li>
