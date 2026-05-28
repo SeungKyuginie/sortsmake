@@ -266,16 +266,16 @@ function buildItemChain(
   // 가로 여유분 전체를 좌→우 풀 패닝으로 보여줌 (사진의 모든 가로 컨텐츠 노출).
   // 가로 비율(iw/ih > 9/16)일 때만 의미 있음 — 세로/정사각형은 패닝 폭이 0이라
   // 단순 fit으로 처리 (위아래 큰 블러 액자).
-  if (frameStyle === 'blur' && srcWidth && srcHeight) {
-    const aspect = srcWidth / srcHeight;
+  if (frameStyle === 'blur') {
     const canvasAspect = WIDTH / HEIGHT; // 0.5625
     const fillRatio = 0.9; // 화면 높이의 90%만 사용 → 5% 위, 5% 아래 블러
     const photoH = Math.round((HEIGHT * fillRatio) / 2) * 2; // 짝수
-    const photoW = Math.round((photoH * aspect) / 2) * 2;
+    const aspect = srcWidth && srcHeight ? srcWidth / srcHeight : null;
+    const photoW = aspect ? Math.round((photoH * aspect) / 2) * 2 : 0;
     const dir = idx % 2 === 0 ? 1 : -1;
 
-    // 가로 사진: photoW > WIDTH → 패닝 가능
-    if (aspect > canvasAspect && photoW > WIDTH) {
+    // 가로 사진(메타 정보가 있고 가로 비율인 경우): 패닝 가능
+    if (aspect !== null && aspect > canvasAspect && photoW > WIDTH) {
       const panRange = photoW - WIDTH;
       // panRatio (0~1) 만큼만 사용 (나머지는 양쪽 여백)
       const usedRange = Math.round(panRange * panRatio);
@@ -300,7 +300,7 @@ function buildItemChain(
       );
     }
 
-    // 세로/정사각형 사진: 패닝 불가, fit + 블러 액자 (정적)
+    // 세로/정사각형 또는 메타 정보 없음: 패닝 불가, fit + 블러 액자 (정적)
     return (
       `[${idx}:v]split=2[bg${idx}][fg${idx}];` +
       `[bg${idx}]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,` +

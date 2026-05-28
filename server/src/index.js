@@ -226,15 +226,15 @@ function buildItemChain(idx, T, opts) {
     );
   }
 
-  if (frameStyle === 'blur' && srcWidth && srcHeight) {
-    const aspect = srcWidth / srcHeight;
+  if (frameStyle === 'blur') {
     const canvasAspect = WIDTH / HEIGHT;
     const fillRatio = 0.9;
     const photoH = Math.round((HEIGHT * fillRatio) / 2) * 2;
-    const photoW = Math.round((photoH * aspect) / 2) * 2;
+    const aspect = srcWidth && srcHeight ? srcWidth / srcHeight : null;
+    const photoW = aspect ? Math.round((photoH * aspect) / 2) * 2 : 0;
     const dir = idx % 2 === 0 ? 1 : -1;
 
-    if (aspect > canvasAspect && photoW > WIDTH) {
+    if (aspect !== null && aspect > canvasAspect && photoW > WIDTH) {
       const panRange = photoW - WIDTH;
       const usedRange = Math.round(panRange * panRatio);
       const startOffset = Math.round((panRange - usedRange) / 2);
