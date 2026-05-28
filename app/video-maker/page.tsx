@@ -897,13 +897,31 @@ export default function VideoMakerPage() {
 
       let blob: Blob;
       if (renderMode === 'server') {
-        // 서버 렌더링 (Cloud Run) — Phase 2A는 cover 모드만, 자막/블러/드론/BGM 미적용
+        // 서버 렌더링 (Cloud Run) — 풀 기능: 자막/블러/드론/BGM 모두 지원
         blob = await renderOnCloud(
           {
-            items: photos.map((p) => ({ file: p.file, kind: p.kind })),
+            items: photos.map((p) => ({
+              file: p.file,
+              kind: p.kind,
+              width: p.width,
+              height: p.height,
+              droneShot: p.droneShot,
+            })),
             itemDurations,
-            audio: voice.audioBlob,
+            frameStyle,
             panRatio,
+            resolution,
+            audio: voice.audioBlob,
+            audioDurationSec: voice.totalDur,
+            bgm: bgmFile,
+            bgmVolume,
+            hookText: script.hook,
+            hookStart,
+            hookEnd,
+            ctaText: script.cta,
+            ctaStart,
+            ctaEnd,
+            phrases,
           },
           ({ ratio, message }) => {
             setRenderRatio(ratio);
@@ -1108,8 +1126,8 @@ export default function VideoMakerPage() {
               value={renderMode}
               onChange={(e) => setRenderMode(e.target.value as 'browser' | 'server')}
             >
-              <option value="browser">브라우저 (모든 기능, PC 권장)</option>
-              <option value="server">서버 (폰에서도 빠름 · 자막/블러/드론/BGM 미지원)</option>
+              <option value="browser">브라우저 (PC 권장)</option>
+              <option value="server">서버 (폰에서도 빠름 · 풀 기능)</option>
             </select>
           </div>
           <div>

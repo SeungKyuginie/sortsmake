@@ -1,16 +1,38 @@
 import { NextResponse } from 'next/server';
-import { getCloudRunIdToken, getCloudRunUrl } from '../_gcp';
+import {
+  getCloudRunIdToken,
+  getCloudRunUrl,
+  getServiceAccountKey,
+  getBucketName,
+} from '../_gcp';
+import { signV4GetUrl } from '../_signing';
 
 export const runtime = 'nodejs';
-// Cloud Run 렌더링이 길어질 수 있으므로 충분히 길게 (Vercel Pro 한도)
 export const maxDuration = 300;
 
+type Phrase = { text: string; start: number; end: number };
+
 type RequestBody = {
-  photoUrls: string[]; // gs:// 경로들
-  audioUrl: string; // gs://
+  photoUrls: string[];
+  photoWidths?: number[];
+  photoHeights?: number[];
+  audioUrl: string;
+  bgmUrl?: string | null;
   itemDurations: number[];
+  droneShots?: boolean[];
+  frameStyle?: 'cover' | 'blur';
   panRatio?: number;
-  outputKey: string; // renders/<id>/out.mp4
+  resolution?: '1080p' | '720p';
+  hookText?: string;
+  hookStart?: number;
+  hookEnd?: number;
+  ctaText?: string;
+  ctaStart?: number;
+  ctaEnd?: number;
+  phrases?: Phrase[];
+  bgmVolume?: number;
+  audioDurationSec: number;
+  outputKey: string;
 };
 
 export async function POST(req: Request) {
@@ -27,12 +49,6 @@ export async function POST(req: Request) {
   if (!body.audioUrl) {
     return NextResponse.json({ error: 'audioUrl 필수' }, { status: 400 });
   }
-  if (!Array.isArray(body.itemDurations) || body.itemDurations.length !== body.photoUrls.length) {
-    return NextResponse.json(
-      { error: 'itemDurations 길이가 photoUrls와 같아야 합니다.' },
-      { status: 400 },
-    );
-  }
   if (!body.outputKey) {
     return NextResponse.json({ error: 'outputKey 필수' }, { status: 400 });
   }
@@ -47,33 +63,40 @@ export async function POST(req: Request) {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        photoUrls: body.photoUrls,
-        audioUrl: body.audioUrl,
-        itemDurations: body.itemDurations,
-        panRatio: body.panRatio ?? 0.6,
-        outputKey: body.outputKey,
-      }),
+      body: JSON.stringify(body),
     });
 
     const text = await res.text();
-    let data: unknown;
+    let data: Record<string, unknown> = {};
     try {
-      data = JSON.parse(text);
+      data = JSON.parse(text) as Record<string, unknown>;
     } catch {
       data = { error: `Cloud Run 응답 파싱 실패: ${text.slice(0, 400)}` };
     }
 
     if (!res.ok) {
-      const msg =
-        (typeof data === 'object' && data && 'error' in data && typeof (data as { error?: unknown }).error === 'string'
-          ? (data as { error: string }).error
-          : `Cloud Run 오류 (${res.status})`) as string;
-      return NextResponse.json({ error: msg }, { status: 502 });
+      const errMsg = typeof data.error === 'string' ? data.error : `Cloud Run 오류 (${res.status})`;
+      return NextResponse.json({ error: errMsg }, { status: 502 });
     }
 
-    // 정상 응답: { ok, videoUrl, elapsedMs, renderId }
-    return NextResponse.json(data);
+    // Cloud Run이 outputKey 경로로 업로드 완료.
+    // 다운로드 URL을 Vercel에서 직접 서명해서 반환 (Cloud Run signBlob 의존 제거).
+    const key = getServiceAccountKey();
+    const bucket = getBucketName();
+    const downloadUrl = signV4GetUrl({
+      bucket,
+      objectKey: body.outputKey,
+      clientEmail: key.client_email,
+      privateKey: key.private_key,
+      expiresInSeconds: 60 * 60,
+    });
+
+    return NextResponse.json({
+      ok: true,
+      videoUrl: downloadUrl,
+      elapsedMs: data.elapsedMs,
+      renderId: data.renderId,
+    });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Cloud Run 호출 실패';
     return NextResponse.json({ error: msg }, { status: 502 });

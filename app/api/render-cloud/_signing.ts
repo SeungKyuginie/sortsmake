@@ -48,6 +48,21 @@ function encodeObjectKeyForCanonicalUri(key: string): string {
 }
 
 export function signV4PutUrl(opts: SignOpts): string {
+  return signV4Url({ ...opts, method: 'PUT', signContentType: true });
+}
+
+export function signV4GetUrl(opts: Omit<SignOpts, 'contentType'>): string {
+  return signV4Url({
+    ...opts,
+    contentType: '',
+    method: 'GET',
+    signContentType: false,
+  });
+}
+
+function signV4Url(
+  opts: SignOpts & { method: 'PUT' | 'GET'; signContentType: boolean },
+): string {
   const { datetime, date } = nowUtcParts();
   const credentialScope = `${date}/auto/storage/goog4_request`;
   const credential = `${opts.clientEmail}/${credentialScope}`;
@@ -59,7 +74,7 @@ export function signV4PutUrl(opts: SignOpts): string {
     'X-Goog-Credential': credential,
     'X-Goog-Date': datetime,
     'X-Goog-Expires': String(opts.expiresInSeconds),
-    'X-Goog-SignedHeaders': 'content-type;host',
+    'X-Goog-SignedHeaders': opts.signContentType ? 'content-type;host' : 'host',
   };
 
   const canonicalQuery = Object.keys(queryParams)
@@ -67,12 +82,14 @@ export function signV4PutUrl(opts: SignOpts): string {
     .map((k) => `${rfc3986EncodeUri(k)}=${rfc3986EncodeUri(queryParams[k])}`)
     .join('&');
 
-  const canonicalHeaders = `content-type:${opts.contentType}\nhost:${host}\n`;
-  const signedHeaders = 'content-type;host';
+  const canonicalHeaders = opts.signContentType
+    ? `content-type:${opts.contentType}\nhost:${host}\n`
+    : `host:${host}\n`;
+  const signedHeaders = opts.signContentType ? 'content-type;host' : 'host';
   const payloadHash = 'UNSIGNED-PAYLOAD';
 
   const canonicalRequest = [
-    'PUT',
+    opts.method,
     canonicalUri,
     canonicalQuery,
     canonicalHeaders,

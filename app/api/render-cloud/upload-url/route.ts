@@ -8,6 +8,7 @@ export const maxDuration = 30;
 type RequestBody = {
   photos: { mediaType: string; ext?: string }[];
   audio?: { mediaType: string };
+  bgm?: { mediaType: string };
 };
 
 // 브라우저가 GCS에 직접 업로드하기 위한 서명된 PUT URL 발급.
@@ -74,10 +75,34 @@ export async function POST(req: Request) {
       };
     }
 
+    let bgmUpload: {
+      uploadUrl: string;
+      gcsPath: string;
+      contentType: string;
+    } | null = null;
+    if (body.bgm) {
+      const ext = extFromMediaType(body.bgm.mediaType) || 'mp3';
+      const objectKey = `renders/${renderId}/bgm.${ext}`;
+      const uploadUrl = signV4PutUrl({
+        bucket,
+        objectKey,
+        clientEmail: key.client_email,
+        privateKey: key.private_key,
+        expiresInSeconds: expiresSec,
+        contentType: body.bgm.mediaType,
+      });
+      bgmUpload = {
+        uploadUrl,
+        gcsPath: `gs://${bucket}/${objectKey}`,
+        contentType: body.bgm.mediaType,
+      };
+    }
+
     return NextResponse.json({
       renderId,
       photoUploads,
       audioUpload,
+      bgmUpload,
       outputKey: `renders/${renderId}/out.mp4`,
     });
   } catch (err) {
