@@ -89,21 +89,28 @@ export function PhotoUploader({
                       {p.kind === 'image' && !p.droneShot && (
                         <button
                           type="button"
-                          title="드론샷 효과 적용 (사진을 위에서 줌아웃)"
-                          className="btn-secondary px-2 py-1 text-xs"
+                          title="AI로 항공샷 이미지 생성 후 줌아웃 효과까지 적용"
+                          disabled={p.droneAiStatus === 'generating'}
+                          className={`px-2 py-1 text-xs rounded border font-medium transition-colors ${
+                            p.droneAiStatus === 'generating'
+                              ? 'bg-gray-200 text-gray-500 border-gray-300 cursor-wait'
+                              : 'btn-secondary'
+                          }`}
                           onClick={() => onGenerateDrone?.(p.id)}
                         >
-                          🚁 드론샷
+                          {p.droneAiStatus === 'generating'
+                            ? '🚁 생성 중…'
+                            : '🚁 드론샷'}
                         </button>
                       )}
                       {p.kind === 'image' && p.droneShot && (
                         <button
                           type="button"
-                          title="드론샷 효과 끄기"
+                          title="원본 사진으로 되돌리기"
                           className="px-2 py-1 text-xs rounded border font-medium bg-sky-500 text-white border-sky-500"
                           onClick={() => onCancelDrone?.(p.id)}
                         >
-                          🚁 드론샷 ON
+                          🚁 드론샷 적용됨
                         </button>
                       )}
                       <button
@@ -153,6 +160,11 @@ export function PhotoUploader({
                       }
                     />
                   </div>
+                  {p.droneAiError ? (
+                    <div className="rounded-md bg-red-50 border border-red-200 p-2 text-xs text-red-700">
+                      드론샷 생성 실패: {p.droneAiError}
+                    </div>
+                  ) : null}
                 </div>
               </div>
             </li>

@@ -488,25 +488,103 @@ export default function VideoMakerPage() {
     });
   };
 
-  // 드론샷 토글 ON — ffmpeg 줌아웃 효과 적용
-  const onGenerateDrone = (id: string) => {
-    setPhotos((p) =>
-      p.map((x) =>
-        x.id === id && x.kind === 'image'
-          ? { ...x, droneShot: true, droneAiStatus: 'ready', droneAiError: undefined }
-          : x,
-      ),
-    );
-  };
+  // 드론샷 생성 — Gemini가 사진을 항공 시점으로 변환 + ffmpeg 줌아웃 효과
+  const onGenerateDrone = async (id: string) => {
+    const target = photos.find((p) => p.id === id);
+    if (!target || target.kind !== 'image') return;
 
-  // 드론샷 토글 OFF
-  const onCancelDrone = (id: string) => {
     setPhotos((p) =>
       p.map((x) =>
         x.id === id
-          ? { ...x, droneShot: false, droneAiStatus: 'idle', droneAiError: undefined }
+          ? { ...x, droneAiStatus: 'generating', droneAiError: undefined }
           : x,
       ),
+    );
+
+    try {
+      const { base64, mediaType } = await encodeImageForClaude(target.file);
+
+      const res = await fetch('/api/generate-drone-photo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageBase64: base64, mediaType }),
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(data.error || `드론샷 생성 실패 (${res.status})`);
+      }
+      const data = (await res.json()) as {
+        imageBase64: string;
+        mediaType: string;
+      };
+
+      // base64 → File
+      const binary = atob(data.imageBase64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      const ext = data.mediaType === 'image/jpeg' ? 'jpg' : 'png';
+      const newFile = new File(
+        [bytes],
+        `drone-${target.id}-${Date.now()}.${ext}`,
+        { type: data.mediaType },
+      );
+      const localUrl = URL.createObjectURL(newFile);
+
+      setPhotos((p) =>
+        p.map((x) =>
+          x.id === id
+            ? {
+                ...x,
+                originalFile: x.originalFile ?? x.file,
+                originalPreviewUrl: x.originalPreviewUrl ?? x.previewUrl,
+                originalKind: x.originalKind ?? x.kind,
+                file: newFile,
+                previewUrl: localUrl,
+                kind: 'image',
+                droneShot: true,
+                droneAiStatus: 'ready',
+                droneAiError: undefined,
+              }
+            : x,
+        ),
+      );
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : '드론샷 생성 실패';
+      setPhotos((p) =>
+        p.map((x) =>
+          x.id === id
+            ? { ...x, droneAiStatus: 'error', droneAiError: msg }
+            : x,
+        ),
+      );
+    }
+  };
+
+  // 드론샷 취소 — 원본 사진으로 되돌리기
+  const onCancelDrone = (id: string) => {
+    setPhotos((p) =>
+      p.map((x) => {
+        if (x.id !== id) return x;
+        if (!x.originalFile || !x.originalPreviewUrl) {
+          // 원본이 없으면 그냥 플래그만 끄기 (예외 케이스)
+          return { ...x, droneShot: false, droneAiStatus: 'idle', droneAiError: undefined };
+        }
+        if (x.previewUrl !== x.originalPreviewUrl) {
+          URL.revokeObjectURL(x.previewUrl);
+        }
+        return {
+          ...x,
+          file: x.originalFile,
+          previewUrl: x.originalPreviewUrl,
+          kind: x.originalKind ?? 'image',
+          droneShot: false,
+          droneAiStatus: 'idle',
+          droneAiError: undefined,
+          originalFile: undefined,
+          originalPreviewUrl: undefined,
+          originalKind: undefined,
+        };
+      }),
     );
   };
 
