@@ -859,12 +859,25 @@ export default function VideoMakerPage() {
       const { itemDurations, phrases, hookStart, hookEnd, ctaStart, ctaEnd } =
         buildRenderTimeline();
 
+      // 렌더링 직전에 width/height 누락된 사진은 다시 측정 (블러 조건 보장)
+      let photosForRender = photos;
+      if (photos.some((p) => !p.width || !p.height)) {
+        photosForRender = await Promise.all(
+          photos.map(async (p) => {
+            if (p.width && p.height) return p;
+            const dim = await probeMediaSize(p.file, p.kind);
+            return { ...p, width: dim.width ?? p.width, height: dim.height ?? p.height };
+          }),
+        );
+        setPhotos(photosForRender);
+      }
+
       let blob: Blob;
       if (renderMode === 'server') {
         // 서버 렌더링 (Cloud Run) — 풀 기능: 자막/블러/드론/BGM 모두 지원
         blob = await renderOnCloud(
           {
-            items: photos.map((p) => ({
+            items: photosForRender.map((p) => ({
               file: p.file,
               kind: p.kind,
               width: p.width,
@@ -896,14 +909,14 @@ export default function VideoMakerPage() {
         // 브라우저 렌더링 (ffmpeg.wasm) — 모든 기능 사용 가능
         blob = await renderVideo(
           {
-            items: photos.map((p) => ({
+            items: photosForRender.map((p) => ({
               file: p.file,
               kind: p.kind,
               width: p.width,
               height: p.height,
             })),
             itemDurations,
-            droneShots: photos.map((p) => p.droneShot ?? false),
+            droneShots: photosForRender.map((p) => p.droneShot ?? false),
             frameStyle,
             panRatio,
             resolution,
