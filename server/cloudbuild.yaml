@@ -1,5 +1,6 @@
 # Cloud Build 구성 — GitHub main 푸시 시 자동으로 Docker 이미지 빌드 + Cloud Run 배포.
 # 트리거에서 `--substitutions=_REGION=asia-northeast3,_SERVICE=sortsmake-server` 같이 환경 변수 오버라이드 가능.
+# 자동 배포 테스트 (2026-05-28)
 
 substitutions:
   _REGION: asia-northeast3
