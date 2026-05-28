@@ -240,8 +240,8 @@ function buildItemChain(
     );
   }
 
-  if (droneShot) {
-    // 드론샷: 건드리지 말 것 (사용자 지시)
+  if (droneShot && frameStyle !== 'blur') {
+    // 드론샷: 건드리지 말 것 (사용자 지시) — 단, 블러 액자 옵션이면 블러가 우선
     const droneFrames = Math.max(2, Math.round(T * FPS));
     const wOver = Math.round(WIDTH * 1.6);
     const hOver = Math.round(HEIGHT * 1.6);

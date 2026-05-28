@@ -206,7 +206,7 @@ function buildItemChain(idx, T, opts) {
   const { droneShot = false, frameStyle = 'cover', panRatio = 0.6, srcWidth, srcHeight } = opts;
   const Tstr = T.toFixed(3);
 
-  if (droneShot) {
+  if (droneShot && frameStyle !== 'blur') {
     const droneFrames = Math.max(2, Math.round(T * FPS));
     const wOver = Math.round(WIDTH * 1.6);
     const hOver = Math.round(HEIGHT * 1.6);
