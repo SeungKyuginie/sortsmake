@@ -1,18 +1,17 @@
 import { NextResponse } from 'next/server';
-import { getStorage, getBucketName } from '../_gcp';
+import { getServiceAccountKey, getBucketName } from '../_gcp';
+import { signV4PutUrl } from '../_signing';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
 
 type RequestBody = {
-  // 사진 개수와 각 사진의 MIME 타입
   photos: { mediaType: string; ext?: string }[];
-  // 음성 파일 (선택)
   audio?: { mediaType: string };
 };
 
 // 브라우저가 GCS에 직접 업로드하기 위한 서명된 PUT URL 발급.
-// Vercel 함수 4.5MB 한도를 우회.
+// @google-cloud/storage의 IAM signBlob 의존성을 피하기 위해 private_key로 직접 서명.
 export async function POST(req: Request) {
   let body: RequestBody;
   try {
@@ -22,29 +21,35 @@ export async function POST(req: Request) {
   }
 
   if (!Array.isArray(body.photos) || body.photos.length === 0) {
-    return NextResponse.json({ error: 'photos는 최소 1개 이상이어야 합니다.' }, { status: 400 });
+    return NextResponse.json(
+      { error: 'photos는 최소 1개 이상이어야 합니다.' },
+      { status: 400 },
+    );
   }
 
   try {
-    const storage = getStorage();
-    const bucket = storage.bucket(getBucketName());
-    // 같은 렌더 잡의 파일들을 하나의 prefix로 묶음
+    const key = getServiceAccountKey();
+    const bucket = getBucketName();
     const renderId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const expiresAt = Date.now() + 15 * 60 * 1000; // 15분
+    const expiresSec = 15 * 60; // 15분
 
-    const photoUploads = await Promise.all(
-      body.photos.map(async (p, i) => {
-        const ext = p.ext || extFromMediaType(p.mediaType) || 'jpg';
-        const key = `renders/${renderId}/photo-${i}.${ext}`;
-        const [uploadUrl] = await bucket.file(key).getSignedUrl({
-          version: 'v4',
-          action: 'write',
-          expires: expiresAt,
-          contentType: p.mediaType,
-        });
-        return { uploadUrl, gcsPath: `gs://${bucket.name}/${key}`, contentType: p.mediaType };
-      }),
-    );
+    const photoUploads = body.photos.map((p, i) => {
+      const ext = p.ext || extFromMediaType(p.mediaType) || 'jpg';
+      const objectKey = `renders/${renderId}/photo-${i}.${ext}`;
+      const uploadUrl = signV4PutUrl({
+        bucket,
+        objectKey,
+        clientEmail: key.client_email,
+        privateKey: key.private_key,
+        expiresInSeconds: expiresSec,
+        contentType: p.mediaType,
+      });
+      return {
+        uploadUrl,
+        gcsPath: `gs://${bucket}/${objectKey}`,
+        contentType: p.mediaType,
+      };
+    });
 
     let audioUpload: {
       uploadUrl: string;
@@ -53,16 +58,18 @@ export async function POST(req: Request) {
     } | null = null;
     if (body.audio) {
       const ext = extFromMediaType(body.audio.mediaType) || 'mp3';
-      const key = `renders/${renderId}/audio.${ext}`;
-      const [uploadUrl] = await bucket.file(key).getSignedUrl({
-        version: 'v4',
-        action: 'write',
-        expires: expiresAt,
+      const objectKey = `renders/${renderId}/audio.${ext}`;
+      const uploadUrl = signV4PutUrl({
+        bucket,
+        objectKey,
+        clientEmail: key.client_email,
+        privateKey: key.private_key,
+        expiresInSeconds: expiresSec,
         contentType: body.audio.mediaType,
       });
       audioUpload = {
         uploadUrl,
-        gcsPath: `gs://${bucket.name}/${key}`,
+        gcsPath: `gs://${bucket}/${objectKey}`,
         contentType: body.audio.mediaType,
       };
     }
