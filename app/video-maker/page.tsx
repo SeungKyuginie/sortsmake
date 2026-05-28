@@ -1387,6 +1387,13 @@ export default function VideoMakerPage() {
           </div>
         </div>
 
+        {bgmError ? (
+          <div className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800">
+            <div className="mb-1 font-semibold">배경음악 처리 오류</div>
+            <pre className="whitespace-pre-wrap break-all">{bgmError}</pre>
+          </div>
+        ) : null}
+
         {bgmMode === 'library' ? (
           <BgmLibrary
             currentName={bgmFile?.name}
@@ -1396,6 +1403,7 @@ export default function VideoMakerPage() {
                 const res = await fetch(track.file);
                 if (!res.ok) throw new Error(`음악 파일을 찾을 수 없습니다 (${res.status})`);
                 const blob = await res.blob();
+                if (blob.size === 0) throw new Error('빈 파일이 반환됐습니다.');
                 const file = new File([blob], track.id, {
                   type: blob.type || 'audio/mpeg',
                 });
