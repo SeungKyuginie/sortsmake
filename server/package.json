@@ -1,0 +1,13 @@
+{
+  "name": "sortsmake-server",
+  "version": "0.1.0",
+  "private": true,
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "@google-cloud/storage": "^7.14.0"
+  }
+}
