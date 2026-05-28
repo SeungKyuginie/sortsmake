@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { encodeImageForClaude, encodeVideoFirstFrame } from './encodeImage';
-import { distributeTimings, splitPhrases } from './parseSegments';
 import { PhotoUploader } from './PhotoUploader';
 import { StepIndicator } from './StepIndicator';
 import { VoicePreviewButton } from './VoicePreviewButton';
@@ -854,15 +853,16 @@ export default function VideoMakerPage() {
     let cursor = voice.hookDur; // 코너 시작점
     for (let i = 0; i < N; i++) {
       const seg = script.segments[i];
-      const text = seg?.text ?? '';
-      const phraseTexts = splitPhrases(text);
-      if (phraseTexts.length === 0) {
-        cursor += cornerDurs[i];
-        continue;
-      }
-      const timed = distributeTimings(phraseTexts, cornerDurs[i], cursor);
-      for (const t of timed) {
-        phrases.push({ ...t, highlight: false });
+      const text = (seg?.text ?? '').trim();
+      // 코너 자막은 전체를 한 블록으로 — 코너 길이 동안 통째로 표시.
+      // (예전엔 글자수 비례로 phrase를 잘랐는데 TTS 발음 속도와 어긋남)
+      if (text) {
+        phrases.push({
+          text,
+          start: cursor,
+          end: cursor + cornerDurs[i],
+          highlight: false,
+        });
       }
       cursor += cornerDurs[i];
     }

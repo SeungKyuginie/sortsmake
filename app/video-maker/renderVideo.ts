@@ -474,16 +474,20 @@ export async function renderVideo(
     }
   }
 
-  // Phrase 오버레이 — 중간 라인 (모두 흰색 일반 톤, 강조어 없음)
+  // Phrase 오버레이 — 코너당 한 블록으로 통째로 표시. 자동 줄바꿈.
+  // 여러 줄로 늘어나면 PHRASE_Y에서 위로 살짝 올려 화면 중앙에 균형.
   for (const p of phrases) {
     if (!p.text.trim() || p.end <= p.start) continue;
+    const maxChars = maxCharsForFont(FONT_BASE);
+    const lineCount = wrapKoreanText(p.text, maxChars).length || 1;
+    const lineHeight = Math.round(FONT_BASE * 1.15);
+    const yOffset = Math.round(((lineCount - 1) * lineHeight) / 2);
     drawNodes.push(
-      drawTextNode({
-        text: p.text,
+      ...drawWrappedTextNodes(p.text, {
         start: p.start,
         end: p.end,
         fontSize: FONT_BASE,
-        y: PHRASE_Y,
+        y: PHRASE_Y - yOffset,
         color: 'white',
         fontFile,
       }),

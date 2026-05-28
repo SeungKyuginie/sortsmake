@@ -432,16 +432,19 @@ app.post('/render', async (req, res) => {
     }
 
     if (Array.isArray(b.phrases)) {
+      const maxChars = maxCharsForFont(FONT_BASE);
+      const lineHeight = Math.round(FONT_BASE * 1.15);
       for (const p of b.phrases) {
         if (!p || typeof p.text !== 'string' || !p.text.trim()) continue;
         if (!(p.end > p.start)) continue;
+        const lineCount = wrapKoreanText(p.text, maxChars).length || 1;
+        const yOffset = Math.round(((lineCount - 1) * lineHeight) / 2);
         drawNodes.push(
-          drawTextNode({
-            text: p.text,
+          ...drawWrappedTextNodes(p.text, {
             start: p.start,
             end: p.end,
             fontSize: FONT_BASE,
-            y: PHRASE_Y,
+            y: PHRASE_Y - yOffset,
             color: 'white',
             fontFile,
           }),
