@@ -575,7 +575,7 @@ export async function renderVideo(
     '-movflags',
     '+faststart',
     '-preset',
-    'veryfast',
+    'ultrafast',
     '-y',
     'out.mp4',
   );

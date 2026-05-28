@@ -128,8 +128,8 @@ export default function VideoMakerPage() {
   const [frameStyle, setFrameStyle] = useState<'cover' | 'blur'>('cover');
   // 패닝 속도: 0(정적) ~ 1(최대) — cover/blur 모드 공통
   const [panRatio, setPanRatio] = useState(0.6);
-  // 출력 해상도: 1080p(고품질) / 720p(빠른 렌더링, 작은 파일)
-  const [resolution, setResolution] = useState<'1080p' | '720p'>('1080p');
+  // 출력 해상도: 720p 기본 (모바일 시청 충분 + 빠른 렌더링). 1080p는 옵션.
+  const [resolution, setResolution] = useState<'1080p' | '720p'>('720p');
   // 렌더링 모드: browser(브라우저 ffmpeg.wasm) / server(Cloud Run, 폰에서도 빠름)
   // Phase 2A: server 모드는 자막/블러/드론/BGM 미지원 (cover 모드만).
   const [renderMode, setRenderMode] = useState<'browser' | 'server'>('browser');
@@ -390,7 +390,7 @@ export default function VideoMakerPage() {
     setDuration(30);
     setFrameStyle('cover');
     setPanRatio(0.6);
-    setResolution('1080p');
+    setResolution('720p');
     setRenderMode('browser');
     setPhotos([]);
     setSpeaker('ko-KR-Chirp3-HD-Leda');
@@ -1035,6 +1035,9 @@ export default function VideoMakerPage() {
           <p className="mt-1 text-xs text-gray-400">
             작업한 내용은 자동 저장됩니다 (브라우저 새로고침해도 유지). 새로 시작하려면 우측 초기화 버튼을 눌러주세요.
           </p>
+          <p className="mt-2 text-xs font-medium text-gray-500">
+            프로그램 제작: 주식회사 인스로드
+          </p>
         </div>
         <button
           type="button"
@@ -1115,8 +1118,8 @@ export default function VideoMakerPage() {
               value={resolution}
               onChange={(e) => setResolution(e.target.value as '1080p' | '720p')}
             >
-              <option value="1080p">1080p (풀 HD, 기본)</option>
-              <option value="720p">720p (빠른 렌더링, 작은 파일)</option>
+              <option value="720p">720p (빠름, 권장)</option>
+              <option value="1080p">1080p (풀 HD)</option>
             </select>
           </div>
           <div>
@@ -1598,7 +1601,12 @@ export default function VideoMakerPage() {
       ) : null}
 
       <footer className="mt-10 text-center text-xs text-gray-400">
-        ffmpeg.wasm은 브라우저에서 동작합니다 · COOP/COEP cross-origin isolated 필요 (next.config.js 설정됨)
+        <div className="font-medium text-gray-500">
+          프로그램 제작: 주식회사 인스로드
+        </div>
+        <div className="mt-1">
+          ffmpeg.wasm은 브라우저에서 동작합니다 · COOP/COEP cross-origin isolated 필요 (next.config.js 설정됨)
+        </div>
       </footer>
     </main>
   );
