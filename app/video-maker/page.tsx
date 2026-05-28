@@ -13,6 +13,7 @@ import {
   renderVideo,
   type RenderPhrase,
 } from './renderVideo';
+import { renderOnCloud } from './renderCloud';
 import type {
   CornerPhoto,
   ScriptSegment,
@@ -129,6 +130,9 @@ export default function VideoMakerPage() {
   const [panRatio, setPanRatio] = useState(0.6);
   // 출력 해상도: 1080p(고품질) / 720p(빠른 렌더링, 작은 파일)
   const [resolution, setResolution] = useState<'1080p' | '720p'>('1080p');
+  // 렌더링 모드: browser(브라우저 ffmpeg.wasm) / server(Cloud Run, 폰에서도 빠름)
+  // Phase 2A: server 모드는 자막/블러/드론/BGM 미지원 (cover 모드만).
+  const [renderMode, setRenderMode] = useState<'browser' | 'server'>('browser');
 
   // common voice — Chirp3-HD Leda(발랄/소녀)를 기본값으로
   const [speaker, setSpeaker] = useState('ko-KR-Chirp3-HD-Leda');
@@ -248,7 +252,7 @@ export default function VideoMakerPage() {
     let cancelled = false;
     (async () => {
       const [
-        sStoreName, sDuration, sFrameStyle, sPanRatio, sResolution, sPhotos,
+        sStoreName, sDuration, sFrameStyle, sPanRatio, sResolution, sRenderMode, sPhotos,
         sSpeaker, sRate, sPitch,
         sMultiVoice, sHookVoice, sCtaVoice, sCornerVoices,
         sScript, sVoice,
@@ -260,6 +264,7 @@ export default function VideoMakerPage() {
         loadItem<'cover' | 'blur'>('frameStyle'),
         loadItem<number>('panRatio'),
         loadItem<'1080p' | '720p'>('resolution'),
+        loadItem<'browser' | 'server'>('renderMode'),
         loadItem<SerializedPhoto[]>('photos'),
         loadItem<string>('speaker'),
         loadItem<number>('speakingRate'),
@@ -283,6 +288,7 @@ export default function VideoMakerPage() {
       if (sFrameStyle === 'cover' || sFrameStyle === 'blur') setFrameStyle(sFrameStyle);
       if (typeof sPanRatio === 'number' && sPanRatio >= 0 && sPanRatio <= 1) setPanRatio(sPanRatio);
       if (sResolution === '1080p' || sResolution === '720p') setResolution(sResolution);
+      if (sRenderMode === 'browser' || sRenderMode === 'server') setRenderMode(sRenderMode);
       if (sPhotos && sPhotos.length) {
         setPhotos(
           sPhotos.map((p) => ({
@@ -338,6 +344,7 @@ export default function VideoMakerPage() {
   useEffect(() => { if (hydrated) saveItem('frameStyle', frameStyle); }, [hydrated, frameStyle]);
   useEffect(() => { if (hydrated) saveItem('panRatio', panRatio); }, [hydrated, panRatio]);
   useEffect(() => { if (hydrated) saveItem('resolution', resolution); }, [hydrated, resolution]);
+  useEffect(() => { if (hydrated) saveItem('renderMode', renderMode); }, [hydrated, renderMode]);
   useEffect(() => {
     if (!hydrated) return;
     const toSave: SerializedPhoto[] = photos.map((p) => ({
@@ -384,6 +391,7 @@ export default function VideoMakerPage() {
     setFrameStyle('cover');
     setPanRatio(0.6);
     setResolution('1080p');
+    setRenderMode('browser');
     setPhotos([]);
     setSpeaker('ko-KR-Chirp3-HD-Leda');
     setSpeakingRate(1.1);
@@ -886,36 +894,55 @@ export default function VideoMakerPage() {
     try {
       const { itemDurations, phrases, hookStart, hookEnd, ctaStart, ctaEnd } =
         buildRenderTimeline();
-      const blob = await renderVideo(
-        {
-          items: photos.map((p) => ({
-            file: p.file,
-            kind: p.kind,
-            width: p.width,
-            height: p.height,
-          })),
-          itemDurations,
-          droneShots: photos.map((p) => p.droneShot ?? false),
-          frameStyle,
-          panRatio,
-          resolution,
-          phrases,
-          hookText: script.hook,
-          hookStart,
-          hookEnd,
-          ctaText: script.cta,
-          ctaStart,
-          ctaEnd,
-          audio: voice.audioBlob,
-          audioDurationSec: voice.totalDur,
-          bgm: bgmFile,
-          bgmVolume,
-        },
-        ({ ratio, message }) => {
-          setRenderRatio(ratio);
-          setRenderMessage(message);
-        },
-      );
+
+      let blob: Blob;
+      if (renderMode === 'server') {
+        // 서버 렌더링 (Cloud Run) — Phase 2A는 cover 모드만, 자막/블러/드론/BGM 미적용
+        blob = await renderOnCloud(
+          {
+            items: photos.map((p) => ({ file: p.file, kind: p.kind })),
+            itemDurations,
+            audio: voice.audioBlob,
+            panRatio,
+          },
+          ({ ratio, message }) => {
+            setRenderRatio(ratio);
+            setRenderMessage(message);
+          },
+        );
+      } else {
+        // 브라우저 렌더링 (ffmpeg.wasm) — 모든 기능 사용 가능
+        blob = await renderVideo(
+          {
+            items: photos.map((p) => ({
+              file: p.file,
+              kind: p.kind,
+              width: p.width,
+              height: p.height,
+            })),
+            itemDurations,
+            droneShots: photos.map((p) => p.droneShot ?? false),
+            frameStyle,
+            panRatio,
+            resolution,
+            phrases,
+            hookText: script.hook,
+            hookStart,
+            hookEnd,
+            ctaText: script.cta,
+            ctaStart,
+            ctaEnd,
+            audio: voice.audioBlob,
+            audioDurationSec: voice.totalDur,
+            bgm: bgmFile,
+            bgmVolume,
+          },
+          ({ ratio, message }) => {
+            setRenderRatio(ratio);
+            setRenderMessage(message);
+          },
+        );
+      }
       setVideoBlob(blob);
       setStep('render', {
         status: 'complete',
@@ -1072,6 +1099,17 @@ export default function VideoMakerPage() {
             >
               <option value="1080p">1080p (풀 HD, 기본)</option>
               <option value="720p">720p (빠른 렌더링, 작은 파일)</option>
+            </select>
+          </div>
+          <div>
+            <label className="label">렌더링 모드</label>
+            <select
+              className="input"
+              value={renderMode}
+              onChange={(e) => setRenderMode(e.target.value as 'browser' | 'server')}
+            >
+              <option value="browser">브라우저 (모든 기능, PC 권장)</option>
+              <option value="server">서버 (폰에서도 빠름 · 자막/블러/드론/BGM 미지원)</option>
             </select>
           </div>
           <div>
