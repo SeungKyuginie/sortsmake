@@ -1396,8 +1396,7 @@ export default function VideoMakerPage() {
                 const res = await fetch(track.file);
                 if (!res.ok) throw new Error(`음악 파일을 찾을 수 없습니다 (${res.status})`);
                 const blob = await res.blob();
-                const ext = track.file.split('.').pop() || 'mp3';
-                const file = new File([blob], `${track.id}.${ext}`, {
+                const file = new File([blob], track.id, {
                   type: blob.type || 'audio/mpeg',
                 });
                 setBgmFile(file);

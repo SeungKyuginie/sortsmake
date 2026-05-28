@@ -5,7 +5,6 @@ import { useEffect, useState } from 'react';
 type Track = {
   id: string;
   name: string;
-  category: string;
   file: string;
 };
 
@@ -25,8 +24,8 @@ export function BgmLibrary({ currentName, onSelect }: Props) {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch('/bgm/manifest.json', { cache: 'no-store' });
-        if (!res.ok) throw new Error(`manifest 로드 실패 (${res.status})`);
+        const res = await fetch('/api/bgm-list', { cache: 'no-store' });
+        if (!res.ok) throw new Error(`목록 로드 실패 (${res.status})`);
         const data = (await res.json()) as Manifest;
         if (!cancelled) setTracks(data.tracks ?? []);
       } catch {
@@ -47,7 +46,7 @@ export function BgmLibrary({ currentName, onSelect }: Props) {
   if (tracks.length === 0) {
     return (
       <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">
-        등록된 음악이 없습니다. public/bgm/ 폴더에 MP3 파일을 업로드하고 manifest.json에 등록해 주세요.
+        등록된 음악이 없습니다. public/bgm/ 폴더에 MP3 파일을 업로드해 주세요.
       </div>
     );
   }
@@ -59,8 +58,7 @@ export function BgmLibrary({ currentName, onSelect }: Props) {
       </p>
       <ul className="space-y-2">
         {tracks.map((t) => {
-          const isCurrent =
-            currentName && currentName.startsWith(t.id);
+          const isCurrent = currentName === t.id;
           return (
             <li
               key={t.id}
@@ -74,7 +72,6 @@ export function BgmLibrary({ currentName, onSelect }: Props) {
                 <div className="text-sm font-medium text-gray-900 truncate">
                   {t.name}
                 </div>
-                <div className="text-xs text-gray-500">{t.category}</div>
                 <audio
                   className="mt-2 w-full"
                   controls
