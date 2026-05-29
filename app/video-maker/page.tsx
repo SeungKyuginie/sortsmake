@@ -6,6 +6,12 @@ import { BgmLibrary } from './BgmLibrary';
 import { PhotoUploader } from './PhotoUploader';
 import { LogoutButton } from './LogoutButton';
 import { getMyStoreName } from './me-actions';
+import {
+  loadCloudState,
+  saveCloudState,
+  clearCloudState,
+  type CloudState,
+} from './cloud-actions';
 import { StepIndicator } from './StepIndicator';
 import { VoicePreviewButton } from './VoicePreviewButton';
 import { clearAll, loadItem, saveItem } from './storage';
@@ -361,6 +367,100 @@ export default function VideoMakerPage() {
     };
   }, []);
 
+  // 클라우드 동기화 1회 로드 (디바이스 이동 지원). IndexedDB 하이드레이션 이후 1회.
+  const [cloudHydrated, setCloudHydrated] = useState(false);
+  useEffect(() => {
+    if (!hydrated || cloudHydrated) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { state } = await loadCloudState();
+        if (cancelled || !state) {
+          setCloudHydrated(true);
+          return;
+        }
+        // 텍스트/메타만 복원. 사진/음성 blob은 향후 단계에서 처리.
+        if (
+          state.storeNameOverride !== undefined &&
+          !storeNameLocked
+        )
+          setStoreName(state.storeNameOverride);
+        if (state.duration !== undefined) setDuration(state.duration);
+        if (
+          state.frameStyle === 'cover' ||
+          state.frameStyle === 'blur'
+        )
+          setFrameStyle(state.frameStyle);
+        if (state.panRatio !== undefined) setPanRatio(state.panRatio);
+        if (state.resolution === '720p' || state.resolution === '1080p')
+          setResolution(state.resolution);
+        if (state.renderMode === 'browser' || state.renderMode === 'server')
+          setRenderMode(state.renderMode);
+        if (state.voiceId) setSpeaker(state.voiceId);
+        if (state.voiceVarietyEnabled !== undefined)
+          setMultiVoice(state.voiceVarietyEnabled);
+        if (state.hookVoiceId !== undefined) setHookVoice(state.hookVoiceId);
+        if (state.ctaVoiceId !== undefined) setCtaVoice(state.ctaVoiceId);
+        if (state.bgmVolume !== undefined) setBgmVolume(state.bgmVolume);
+        if (
+          state.bgmMode === 'library' ||
+          state.bgmMode === 'upload' ||
+          state.bgmMode === 'ai'
+        )
+          setBgmMode(state.bgmMode);
+        if (state.script) setScript(state.script as ShortsScript);
+      } catch {
+        // 동기화 실패 시 IndexedDB 로컬 데이터로 폴백
+      } finally {
+        if (!cancelled) setCloudHydrated(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated]);
+
+  // 텍스트 상태 변경 시 클라우드에 디바운스 저장 (1.5초)
+  useEffect(() => {
+    if (!cloudHydrated) return;
+    const payload: CloudState = {
+      storeNameOverride: storeNameLocked ? undefined : storeName,
+      duration,
+      frameStyle,
+      panRatio,
+      resolution,
+      renderMode,
+      voiceId: speaker,
+      voiceVarietyEnabled: multiVoice,
+      hookVoiceId: hookVoice,
+      ctaVoiceId: ctaVoice,
+      bgmVolume,
+      bgmMode,
+      script: script ?? undefined,
+    };
+    const t = setTimeout(() => {
+      saveCloudState(payload).catch(() => {});
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [
+    cloudHydrated,
+    storeName,
+    storeNameLocked,
+    duration,
+    frameStyle,
+    panRatio,
+    resolution,
+    renderMode,
+    speaker,
+    multiVoice,
+    hookVoice,
+    ctaVoice,
+    bgmVolume,
+    bgmMode,
+    script,
+  ]);
+
   // 상태 변화 시 자동 저장 (하이드레이션 이후만)
   useEffect(() => { if (hydrated) saveItem('storeName', storeName); }, [hydrated, storeName]);
   useEffect(() => { if (hydrated) saveItem('duration', duration); }, [hydrated, duration]);
@@ -403,6 +503,7 @@ export default function VideoMakerPage() {
       return;
     }
     await clearAll();
+    clearCloudState().catch(() => {});
     // 블롭 URL 정리
     for (const p of photos) {
       if (p.previewUrl) URL.revokeObjectURL(p.previewUrl);
