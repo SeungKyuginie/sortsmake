@@ -139,6 +139,7 @@ export default function VideoMakerPage() {
   // step 1
   const [storeName, setStoreName] = useState('');
   const [storeNameLocked, setStoreNameLocked] = useState(false);
+  const [businessType, setBusinessType] = useState<string>('');
   // 자동 스크립트/음성 사용 여부. 사진관 같은 업종은 둘 다 꺼두고 사진+BGM만 영상화.
   const [useScript, setUseScript] = useState(true);
   const [useVoice, setUseVoice] = useState(true);
@@ -368,11 +369,19 @@ export default function VideoMakerPage() {
     let cancelled = false;
     (async () => {
       try {
-        const { storeName: s } = await getMyStoreName();
+        const { storeName: s, businessType: bt } = await getMyStoreName();
         if (cancelled) return;
         if (s) {
           setStoreName(s);
           setStoreNameLocked(true);
+        }
+        if (bt) {
+          setBusinessType(bt);
+          // 마트 사용자는 토글이 보이지 않으므로 항상 ON 강제
+          if (bt === 'mart') {
+            setUseScript(true);
+            setUseVoice(true);
+          }
         }
       } catch {
         // 비로그인/오류 시 잠금 없이 사용 가능
@@ -1605,6 +1614,7 @@ export default function VideoMakerPage() {
             />
           </div>
         </div>
+        {businessType !== 'mart' ? (
         <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-3">
           <div className="text-xs font-medium text-gray-600">
             영상 구성 옵션
@@ -1647,6 +1657,7 @@ export default function VideoMakerPage() {
             </p>
           ) : null}
         </div>
+        ) : null}
 
         <PhotoUploader
           photos={photos}
