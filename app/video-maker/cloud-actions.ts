@@ -33,6 +33,8 @@ export type CloudState = {
   script?: unknown;
   photos?: CloudPhoto[];
   renderMode?: 'browser' | 'server';
+  useScript?: boolean;
+  useVoice?: boolean;
 };
 
 function ensureUser() {
