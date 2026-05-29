@@ -16,6 +16,8 @@ type Props = {
   fixedDurationSec?: number;
   // 드론샷 버튼 숨김 (사진관 등에서 불필요)
   hideDroneButton?: boolean;
+  // 코너명·힌트 입력 숨김 (스크립트 미사용 업종)
+  hideCornerInputs?: boolean;
 };
 
 export function PhotoUploader({
@@ -29,6 +31,7 @@ export function PhotoUploader({
   showFixedDurationButton = false,
   fixedDurationSec = 4,
   hideDroneButton = false,
+  hideCornerInputs = false,
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -126,10 +129,10 @@ export function PhotoUploader({
                           type="button"
                           title={
                             p.fixedDurationSec
-                              ? `이 사진을 ${p.fixedDurationSec}초 고정 → 균등 분배로 되돌리기`
-                              : `이 사진을 ${fixedDurationSec}초 고정으로 표시`
+                              ? `${p.fixedDurationSec}초 고정 적용됨 (클릭 시 해제)`
+                              : `${fixedDurationSec}초 고정으로 표시`
                           }
-                          className={`px-2 py-1 text-xs rounded border font-medium ${
+                          className={`whitespace-nowrap px-2 py-1 text-xs rounded border font-medium ${
                             p.fixedDurationSec
                               ? 'bg-amber-500 text-white border-amber-500'
                               : 'btn-secondary'
@@ -142,9 +145,7 @@ export function PhotoUploader({
                             })
                           }
                         >
-                          {p.fixedDurationSec
-                            ? `⏱ ${p.fixedDurationSec}초 고정`
-                            : `⏱ ${fixedDurationSec}초 고정`}
+                          ⏱{fixedDurationSec}s
                         </button>
                       )}
                       {p.kind === 'image' && !p.droneShot && (
@@ -154,9 +155,9 @@ export function PhotoUploader({
                         >
                           {(
                             [
-                              { v: 'pan', l: '↔ 패닝' },
-                              { v: 'zoom_in', l: '🔍+ 줌인' },
-                              { v: 'zoom_out', l: '🔍- 줌아웃' },
+                              { v: 'pan', l: '↔', t: '패닝' },
+                              { v: 'zoom_in', l: '🔍+', t: '줌인' },
+                              { v: 'zoom_out', l: '🔍-', t: '줌아웃' },
                             ] as const
                           ).map((opt) => {
                             const active =
@@ -165,7 +166,8 @@ export function PhotoUploader({
                               <button
                                 key={opt.v}
                                 type="button"
-                                className={`px-2 py-1 text-xs font-medium ${
+                                title={opt.t}
+                                className={`whitespace-nowrap px-2 py-1 text-xs font-medium ${
                                   active
                                     ? 'bg-brand-500 text-white'
                                     : 'bg-white text-gray-700 hover:bg-gray-100'
@@ -205,28 +207,32 @@ export function PhotoUploader({
                       </button>
                     </div>
                   </div>
-                  <div>
-                    <label className="label">코너명 (선택)</label>
-                    <input
-                      className="input"
-                      value={p.cornerName}
-                      placeholder="비우면 사진에서 자동 추정"
-                      onChange={(e) =>
-                        onUpdate(p.id, { cornerName: e.target.value })
-                      }
-                    />
-                  </div>
-                  <div>
-                    <label className="label">힌트 (선택)</label>
-                    <textarea
-                      className="input min-h-[64px]"
-                      value={p.description}
-                      placeholder="강조하고 싶은 가격/문구가 있으면 입력 (예: 1.5kg 9,900원 특가)"
-                      onChange={(e) =>
-                        onUpdate(p.id, { description: e.target.value })
-                      }
-                    />
-                  </div>
+                  {!hideCornerInputs && (
+                    <>
+                      <div>
+                        <label className="label">코너명 (선택)</label>
+                        <input
+                          className="input"
+                          value={p.cornerName}
+                          placeholder="비우면 사진에서 자동 추정"
+                          onChange={(e) =>
+                            onUpdate(p.id, { cornerName: e.target.value })
+                          }
+                        />
+                      </div>
+                      <div>
+                        <label className="label">힌트 (선택)</label>
+                        <textarea
+                          className="input min-h-[64px]"
+                          value={p.description}
+                          placeholder="강조하고 싶은 가격/문구가 있으면 입력 (예: 1.5kg 9,900원 특가)"
+                          onChange={(e) =>
+                            onUpdate(p.id, { description: e.target.value })
+                          }
+                        />
+                      </div>
+                    </>
+                  )}
                   {p.droneAiError ? (
                     <div className="rounded-md bg-red-50 border border-red-200 p-2 text-xs text-red-700">
                       드론샷 생성 실패: {p.droneAiError}

@@ -1692,6 +1692,7 @@ export default function VideoMakerPage() {
           showFixedDurationButton={businessType === 'photo_studio'}
           fixedDurationSec={4}
           hideDroneButton={businessType === 'photo_studio'}
+          hideCornerInputs={businessType === 'photo_studio'}
         />
       </section>
 
