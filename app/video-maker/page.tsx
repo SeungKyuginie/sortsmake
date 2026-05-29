@@ -491,6 +491,8 @@ export default function VideoMakerPage() {
                   originalFile,
                   originalPreviewUrl,
                   originalKind: cp.originalKind,
+                  fixedDurationSec: cp.fixedDurationSec,
+                  effectMode: cp.effectMode,
                   droneAiStatus: cp.droneShot ? 'ready' : 'idle',
                   uploadStatus: 'uploaded',
                 };
@@ -540,6 +542,8 @@ export default function VideoMakerPage() {
         height: p.height,
         originalStoragePath: p.originalStoragePath,
         originalKind: p.originalKind,
+        fixedDurationSec: p.fixedDurationSec,
+        effectMode: p.effectMode,
       }));
     const payload: CloudState = {
       storeNameOverride: storeNameLocked ? undefined : storeName,
@@ -1313,6 +1317,7 @@ export default function VideoMakerPage() {
               width: p.width,
               height: p.height,
               droneShot: p.droneShot,
+              effectMode: p.effectMode,
             })),
             itemDurations,
             frameStyle,
@@ -1347,6 +1352,7 @@ export default function VideoMakerPage() {
             })),
             itemDurations,
             droneShots: photosForRender.map((p) => p.droneShot ?? false),
+            effectModes: photosForRender.map((p) => p.effectMode ?? 'pan'),
             frameStyle,
             panRatio,
             resolution,

@@ -50,6 +50,7 @@ export type RenderInput = {
   items: RenderItem[];
   itemDurations: number[]; // sum === audioDurationSec
   droneShots?: boolean[]; // per-item drone shot flag (images only)
+  effectModes?: ('pan' | 'zoom_in' | 'zoom_out')[]; // per-item motion effect (default 'pan')
   // 'cover': 사진을 화면에 꽉 채움 (현재 동작, 가로 사진 좌우 패닝)
   // 'blur': 사진을 살짝만 확대 + 위아래 블러 + 전체 가로 풀 패닝
   frameStyle?: 'cover' | 'blur';
@@ -225,6 +226,7 @@ function buildItemChain(
   srcWidth?: number,
   srcHeight?: number,
   panRatio = 0.6,
+  effectMode: 'pan' | 'zoom_in' | 'zoom_out' = 'pan',
 ): string {
   const Tstr = T.toFixed(3);
 
@@ -312,6 +314,32 @@ function buildItemChain(
     );
   }
 
+  // 줌인/줌아웃 효과 (이미지 전용). 1.0 ↔ 1.2 미세 줌.
+  if (!isVideo && (effectMode === 'zoom_in' || effectMode === 'zoom_out')) {
+    const frames = Math.max(2, Math.round(T * FPS));
+    const zoomFrom = effectMode === 'zoom_in' ? 1.0 : 1.2;
+    const zoomTo = effectMode === 'zoom_in' ? 1.2 : 1.0;
+    const step = ((zoomTo - zoomFrom) / (frames - 1)).toFixed(6);
+    const zExpr =
+      effectMode === 'zoom_in'
+        ? `min(${zoomTo.toFixed(2)},zoom+${step})`
+        : `max(${zoomTo.toFixed(2)},zoom-${(-Number(step)).toFixed(6)})`;
+    const initZ = zoomFrom.toFixed(2);
+    return (
+      `[${idx}:v]split=2[bg${idx}][fg${idx}];` +
+      `[bg${idx}]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,` +
+      `crop=${WIDTH}:${HEIGHT},boxblur=24:4,setsar=1[bgX${idx}];` +
+      `[fg${idx}]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,` +
+      `crop=${WIDTH}:${HEIGHT},setsar=1,` +
+      `trim=end_frame=1,setpts=PTS-STARTPTS,` +
+      `zoompan=z='if(eq(on,1),${initZ},${zExpr})':` +
+      `x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':` +
+      `d=${frames}:s=${WIDTH}x${HEIGHT}:fps=${FPS}[fgX${idx}];` +
+      `[bgX${idx}][fgX${idx}]overlay=(W-w)/2:(H-h)/2,` +
+      `fps=${FPS},format=yuv420p,setpts=PTS-STARTPTS[v${idx}]`
+    );
+  }
+
   // 'cover' 모드 (기본): 가로 사진을 화면에 꽉 채우고 좌우 panRatio 만큼 패닝.
   // amplitude = panRatio / 2 (총 panRatio 폭, 중앙 기준 ±)
   const dir = idx % 2 === 0 ? 1 : -1;
@@ -344,6 +372,7 @@ export async function renderVideo(
     items,
     itemDurations: rawItemDurations,
     droneShots,
+    effectModes,
     frameStyle = 'cover',
     panRatio = 0.6,
     resolution = '1080p',
@@ -428,6 +457,7 @@ export async function renderVideo(
       it.width,
       it.height,
       safePan,
+      effectModes?.[i] ?? 'pan',
     ),
   );
 

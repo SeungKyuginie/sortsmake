@@ -23,6 +23,8 @@ export type CornerPhoto = {
   // 사진관 등 음성 미사용 모드에서 이 사진을 N초 고정으로 보여줄지
   // (해당 값이 있으면 균등 분배 대신 이 시간을 사용)
   fixedDurationSec?: number;
+  // 사진별 모션 효과: 패닝(좌우) / 줌인 / 줌아웃. 기본 'pan'.
+  effectMode?: 'pan' | 'zoom_in' | 'zoom_out';
 };
 
 export type StepKey = 'upload' | 'script' | 'voice' | 'render' | 'done';

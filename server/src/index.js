@@ -203,7 +203,7 @@ function drawWrappedTextNodes(text, baseOpts) {
 // ───────────────────────── 필터 그래프 ─────────────────────────
 
 function buildItemChain(idx, T, opts) {
-  const { droneShot = false, frameStyle = 'cover', panRatio = 0.6, srcWidth, srcHeight } = opts;
+  const { droneShot = false, frameStyle = 'cover', panRatio = 0.6, srcWidth, srcHeight, effectMode = 'pan', isVideo = false } = opts;
   const Tstr = T.toFixed(3);
 
   if (droneShot) {
@@ -259,6 +259,32 @@ function buildItemChain(idx, T, opts) {
       `[bg${idx}]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,` +
       `crop=${WIDTH}:${HEIGHT},boxblur=12:2,setsar=1[bgX${idx}];` +
       `[fg${idx}]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=decrease,setsar=1[fgX${idx}];` +
+      `[bgX${idx}][fgX${idx}]overlay=(W-w)/2:(H-h)/2,` +
+      `fps=${FPS},format=yuv420p,setpts=PTS-STARTPTS[v${idx}]`
+    );
+  }
+
+  // 줌인/줌아웃 (이미지 전용, 1.0 ↔ 1.2)
+  if (!isVideo && (effectMode === 'zoom_in' || effectMode === 'zoom_out')) {
+    const frames = Math.max(2, Math.round(T * FPS));
+    const zoomFrom = effectMode === 'zoom_in' ? 1.0 : 1.2;
+    const zoomTo = effectMode === 'zoom_in' ? 1.2 : 1.0;
+    const step = ((zoomTo - zoomFrom) / (frames - 1)).toFixed(6);
+    const zExpr =
+      effectMode === 'zoom_in'
+        ? `min(${zoomTo.toFixed(2)},zoom+${step})`
+        : `max(${zoomTo.toFixed(2)},zoom-${(-Number(step)).toFixed(6)})`;
+    const initZ = zoomFrom.toFixed(2);
+    return (
+      `[${idx}:v]split=2[bg${idx}][fg${idx}];` +
+      `[bg${idx}]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,` +
+      `crop=${WIDTH}:${HEIGHT},boxblur=24:4,setsar=1[bgX${idx}];` +
+      `[fg${idx}]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,` +
+      `crop=${WIDTH}:${HEIGHT},setsar=1,` +
+      `trim=end_frame=1,setpts=PTS-STARTPTS,` +
+      `zoompan=z='if(eq(on,1),${initZ},${zExpr})':` +
+      `x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':` +
+      `d=${frames}:s=${WIDTH}x${HEIGHT}:fps=${FPS}[fgX${idx}];` +
       `[bgX${idx}][fgX${idx}]overlay=(W-w)/2:(H-h)/2,` +
       `fps=${FPS},format=yuv420p,setpts=PTS-STARTPTS[v${idx}]`
     );
@@ -388,6 +414,8 @@ app.post('/render', async (req, res) => {
         panRatio,
         srcWidth: Array.isArray(b.photoWidths) ? b.photoWidths[i] : undefined,
         srcHeight: Array.isArray(b.photoHeights) ? b.photoHeights[i] : undefined,
+        effectMode: Array.isArray(b.effectModes) ? b.effectModes[i] : 'pan',
+        isVideo: Array.isArray(b.photoKinds) ? b.photoKinds[i] === 'video' : false,
       }),
     );
 

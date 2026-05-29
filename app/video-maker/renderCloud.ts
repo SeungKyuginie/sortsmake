@@ -19,6 +19,7 @@ export type CloudRenderInput = {
     width?: number;
     height?: number;
     droneShot?: boolean;
+    effectMode?: 'pan' | 'zoom_in' | 'zoom_out';
   }[];
   itemDurations: number[];
   frameStyle?: 'cover' | 'blur';
@@ -153,6 +154,8 @@ export async function renderOnCloud(
       bgmUrl: urlData.bgmUpload?.gcsPath ?? null,
       itemDurations,
       droneShots: items.map((it) => !!it.droneShot),
+      effectModes: items.map((it) => it.effectMode ?? 'pan'),
+      photoKinds: items.map((it) => it.kind),
       frameStyle: input.frameStyle ?? 'cover',
       panRatio: input.panRatio ?? 0.6,
       resolution: input.resolution ?? '1080p',

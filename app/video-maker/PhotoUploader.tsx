@@ -144,6 +144,39 @@ export function PhotoUploader({
                             : `⏱ ${fixedDurationSec}초 고정`}
                         </button>
                       )}
+                      {p.kind === 'image' && !p.droneShot && (
+                        <div
+                          className="inline-flex overflow-hidden rounded border border-gray-300"
+                          title="이 사진의 모션 효과 선택"
+                        >
+                          {(
+                            [
+                              { v: 'pan', l: '↔ 패닝' },
+                              { v: 'zoom_in', l: '🔍+ 줌인' },
+                              { v: 'zoom_out', l: '🔍- 줌아웃' },
+                            ] as const
+                          ).map((opt) => {
+                            const active =
+                              (p.effectMode ?? 'pan') === opt.v;
+                            return (
+                              <button
+                                key={opt.v}
+                                type="button"
+                                className={`px-2 py-1 text-xs font-medium ${
+                                  active
+                                    ? 'bg-brand-500 text-white'
+                                    : 'bg-white text-gray-700 hover:bg-gray-100'
+                                }`}
+                                onClick={() =>
+                                  onUpdate(p.id, { effectMode: opt.v })
+                                }
+                              >
+                                {opt.l}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
                       <button
                         type="button"
                         className="btn-secondary px-2 py-1 text-xs"

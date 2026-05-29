@@ -15,6 +15,7 @@ export type CloudPhoto = {
   originalStoragePath?: string;
   originalKind?: 'image' | 'video';
   fixedDurationSec?: number;
+  effectMode?: 'pan' | 'zoom_in' | 'zoom_out';
 };
 
 export type CloudState = {
