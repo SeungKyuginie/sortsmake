@@ -181,11 +181,11 @@ export default function PrivacyPage() {
         <div>
           <h2 className="text-lg font-semibold">8. 개인정보 보호 책임자</h2>
           <p className="mt-2">
-            성명: 양승규
+            성명: 김경애
             <br />
             소속: 주식회사 인스로드
             <br />
-            이메일: ginie@ginie.kr
+            이메일: kka@ginie.kr
           </p>
         </div>
 
