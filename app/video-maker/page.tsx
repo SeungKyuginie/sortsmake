@@ -5,6 +5,7 @@ import { encodeImageForClaude, encodeVideoFirstFrame } from './encodeImage';
 import { BgmLibrary } from './BgmLibrary';
 import { PhotoUploader } from './PhotoUploader';
 import { LogoutButton } from './LogoutButton';
+import { getMyStoreName } from './me-actions';
 import { StepIndicator } from './StepIndicator';
 import { VoicePreviewButton } from './VoicePreviewButton';
 import { clearAll, loadItem, saveItem } from './storage';
@@ -123,6 +124,7 @@ type VoiceTimeline = {
 export default function VideoMakerPage() {
   // step 1
   const [storeName, setStoreName] = useState('');
+  const [storeNameLocked, setStoreNameLocked] = useState(false);
   const [photos, setPhotos] = useState<CornerPhoto[]>([]);
   const [duration, setDuration] = useState(30);
   // 프레임 스타일: cover(꽉 채우기, 현재 동작) / blur(블러 액자 + 풀 가로 패닝)
@@ -337,6 +339,26 @@ export default function VideoMakerPage() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 로그인 사용자의 매장명을 Supabase 메타데이터에서 가져와 자동 채우기 (덮어쓰기 + 잠금)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { storeName: s } = await getMyStoreName();
+        if (cancelled) return;
+        if (s) {
+          setStoreName(s);
+          setStoreNameLocked(true);
+        }
+      } catch {
+        // 비로그인/오류 시 잠금 없이 사용 가능
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // 상태 변화 시 자동 저장 (하이드레이션 이후만)
@@ -1053,12 +1075,20 @@ export default function VideoMakerPage() {
       <section className="card mb-6">
         <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-4">
           <div className="md:col-span-2">
-            <label className="label">매장명 (선택)</label>
+            <label className="label">
+              매장명{storeNameLocked ? ' (계정 등록 정보)' : ' (선택)'}
+            </label>
             <input
-              className="input"
+              className={`input ${storeNameLocked ? 'bg-gray-100 text-gray-700' : ''}`}
               value={storeName}
               onChange={(e) => setStoreName(e.target.value)}
+              readOnly={storeNameLocked}
               placeholder="예: 행복마트 강남점"
+              title={
+                storeNameLocked
+                  ? '매장명은 관리자가 등록한 값으로 고정됩니다. 변경하려면 관리자에게 문의하세요.'
+                  : undefined
+              }
             />
           </div>
           <div>
