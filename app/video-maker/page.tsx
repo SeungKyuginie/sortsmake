@@ -1167,11 +1167,23 @@ export default function VideoMakerPage() {
     const N = photos.length;
     if (N === 0) throw new Error('사진이 없습니다.');
 
-    // 음성 미사용: 사용자가 선택한 duration을 N개 사진에 균등 분배
+    // 음성 미사용: 고정 시간 사진은 그 값, 나머지는 남은 시간 균등 분배
     if (!useVoice) {
-      const totalDur = duration;
-      const each = totalDur / N;
-      const itemDurations = new Array(N).fill(each);
+      const fixedSum = photos.reduce(
+        (acc, p) => acc + (p.fixedDurationSec ?? 0),
+        0,
+      );
+      const flexCount = photos.filter((p) => !p.fixedDurationSec).length;
+      const remaining = Math.max(0, duration - fixedSum);
+      const each = flexCount > 0 ? remaining / flexCount : 0;
+      const itemDurations = photos.map((p) =>
+        p.fixedDurationSec ?? (flexCount > 0 ? each : 0),
+      );
+      // 모든 사진이 고정이면 총 길이가 fixedSum이 되도록
+      // (사용자 duration 설정 무시) — 모자란 경우엔 그대로 유지
+      const totalDur = flexCount > 0
+        ? Math.max(duration, fixedSum)
+        : Math.max(fixedSum, 0.5);
       const phrases: RenderPhrase[] = [];
       // 스크립트 사용 시에만 자막 표시 (음성 없이도 자막은 표시 가능)
       if (useScript && script) {
@@ -1179,15 +1191,16 @@ export default function VideoMakerPage() {
         for (let i = 0; i < N; i++) {
           const seg = script.segments[i];
           const text = (seg?.text ?? '').trim();
-          if (text) {
+          const len = itemDurations[i];
+          if (text && len > 0) {
             phrases.push({
               text,
               start: cursor,
-              end: cursor + each,
+              end: cursor + len,
               highlight: false,
             });
           }
-          cursor += each;
+          cursor += len;
         }
       }
       return {
@@ -1266,9 +1279,12 @@ export default function VideoMakerPage() {
       const { itemDurations, phrases, hookStart, hookEnd, ctaStart, ctaEnd } =
         buildRenderTimeline();
 
-      // 음성 미사용 시 무음 WAV 생성 (ffmpeg가 audio 트랙을 요구함)
-      const audioBlob = useVoice && voice ? voice.audioBlob : makeSilentWavBlob(duration);
-      const audioDurSec = useVoice && voice ? voice.totalDur : duration;
+      // 음성 미사용 시 무음 WAV 생성 (실제 itemDurations 합산으로 길이 맞춤)
+      const totalItemDur = itemDurations.reduce((a, b) => a + b, 0);
+      const audioBlob = useVoice && voice
+        ? voice.audioBlob
+        : makeSilentWavBlob(Math.max(0.5, totalItemDur));
+      const audioDurSec = useVoice && voice ? voice.totalDur : totalItemDur;
       // 스크립트 미사용 시 hook/cta 텍스트 비움
       const hookText = useScript && script ? script.hook : '';
       const ctaText = useScript && script ? script.cta : '';
@@ -1667,6 +1683,8 @@ export default function VideoMakerPage() {
           onReorder={onReorder}
           onGenerateDrone={onGenerateDrone}
           onCancelDrone={onCancelDrone}
+          showFixedDurationButton={businessType === 'photo_studio'}
+          fixedDurationSec={4}
         />
       </section>
 

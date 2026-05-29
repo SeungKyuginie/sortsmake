@@ -14,6 +14,7 @@ export type CloudPhoto = {
   height?: number;
   originalStoragePath?: string;
   originalKind?: 'image' | 'video';
+  fixedDurationSec?: number;
 };
 
 export type CloudState = {

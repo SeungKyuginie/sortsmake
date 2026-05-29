@@ -20,6 +20,9 @@ export type CornerPhoto = {
   storagePath?: string;
   originalStoragePath?: string;
   uploadStatus?: 'idle' | 'uploading' | 'uploaded' | 'error';
+  // 사진관 등 음성 미사용 모드에서 이 사진을 N초 고정으로 보여줄지
+  // (해당 값이 있으면 균등 분배 대신 이 시간을 사용)
+  fixedDurationSec?: number;
 };
 
 export type StepKey = 'upload' | 'script' | 'voice' | 'render' | 'done';

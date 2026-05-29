@@ -11,6 +11,9 @@ type Props = {
   onReorder: (id: string, direction: -1 | 1) => void;
   onGenerateDrone?: (id: string) => void;
   onCancelDrone?: (id: string) => void;
+  // 사진관 등 음성 미사용 모드에서만 노출되는 "N초 고정" 버튼
+  showFixedDurationButton?: boolean;
+  fixedDurationSec?: number;
 };
 
 export function PhotoUploader({
@@ -21,6 +24,8 @@ export function PhotoUploader({
   onReorder,
   onGenerateDrone,
   onCancelDrone,
+  showFixedDurationButton = false,
+  fixedDurationSec = 4,
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -111,6 +116,32 @@ export function PhotoUploader({
                           onClick={() => onCancelDrone?.(p.id)}
                         >
                           🚁 드론샷 적용됨
+                        </button>
+                      )}
+                      {showFixedDurationButton && (
+                        <button
+                          type="button"
+                          title={
+                            p.fixedDurationSec
+                              ? `이 사진을 ${p.fixedDurationSec}초 고정 → 균등 분배로 되돌리기`
+                              : `이 사진을 ${fixedDurationSec}초 고정으로 표시`
+                          }
+                          className={`px-2 py-1 text-xs rounded border font-medium ${
+                            p.fixedDurationSec
+                              ? 'bg-amber-500 text-white border-amber-500'
+                              : 'btn-secondary'
+                          }`}
+                          onClick={() =>
+                            onUpdate(p.id, {
+                              fixedDurationSec: p.fixedDurationSec
+                                ? undefined
+                                : fixedDurationSec,
+                            })
+                          }
+                        >
+                          {p.fixedDurationSec
+                            ? `⏱ ${p.fixedDurationSec}초 고정`
+                            : `⏱ ${fixedDurationSec}초 고정`}
                         </button>
                       )}
                       <button
