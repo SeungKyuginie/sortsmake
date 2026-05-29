@@ -19,7 +19,7 @@ export type CloudRenderInput = {
     width?: number;
     height?: number;
     droneShot?: boolean;
-    effectMode?: 'pan' | 'zoom_in' | 'zoom_out';
+    effectMode?: 'static' | 'pan' | 'zoom_in' | 'zoom_out';
   }[];
   itemDurations: number[];
   frameStyle?: 'cover' | 'blur';
