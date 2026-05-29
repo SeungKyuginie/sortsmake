@@ -31,7 +31,7 @@ export function LoginForm({ redirectTo, initialError }: Props) {
             setError(res.error);
             return;
           }
-          router.replace(redirectTo);
+          router.replace(res?.redirectTo ?? redirectTo);
           router.refresh();
         });
       }}
