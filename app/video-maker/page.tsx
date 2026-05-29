@@ -1691,6 +1691,7 @@ export default function VideoMakerPage() {
           onCancelDrone={onCancelDrone}
           showFixedDurationButton={businessType === 'photo_studio'}
           fixedDurationSec={4}
+          hideDroneButton={businessType === 'photo_studio'}
         />
       </section>
 

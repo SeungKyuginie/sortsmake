@@ -14,6 +14,8 @@ type Props = {
   // 사진관 등 음성 미사용 모드에서만 노출되는 "N초 고정" 버튼
   showFixedDurationButton?: boolean;
   fixedDurationSec?: number;
+  // 드론샷 버튼 숨김 (사진관 등에서 불필요)
+  hideDroneButton?: boolean;
 };
 
 export function PhotoUploader({
@@ -26,6 +28,7 @@ export function PhotoUploader({
   onCancelDrone,
   showFixedDurationButton = false,
   fixedDurationSec = 4,
+  hideDroneButton = false,
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -91,7 +94,7 @@ export function PhotoUploader({
                       #{idx + 1} {p.kind === 'video' ? '🎬 영상' : '🖼 사진'}
                     </span>
                     <div className="flex items-center gap-1">
-                      {p.kind === 'image' && !p.droneShot && (
+                      {!hideDroneButton && p.kind === 'image' && !p.droneShot && (
                         <button
                           type="button"
                           title="AI로 항공샷 이미지 생성 후 줌아웃 효과까지 적용"
@@ -108,7 +111,7 @@ export function PhotoUploader({
                             : '🚁 드론샷'}
                         </button>
                       )}
-                      {p.kind === 'image' && p.droneShot && (
+                      {!hideDroneButton && p.kind === 'image' && p.droneShot && (
                         <button
                           type="button"
                           title="원본 사진으로 되돌리기"
