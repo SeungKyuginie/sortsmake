@@ -16,6 +16,10 @@ export type CornerPhoto = {
   originalFile?: File;
   originalPreviewUrl?: string;
   originalKind?: 'image' | 'video';
+  // 클라우드 동기화 (Supabase Storage 경로)
+  storagePath?: string;
+  originalStoragePath?: string;
+  uploadStatus?: 'idle' | 'uploading' | 'uploaded' | 'error';
 };
 
 export type StepKey = 'upload' | 'script' | 'voice' | 'render' | 'done';

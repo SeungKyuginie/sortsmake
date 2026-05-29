@@ -2,7 +2,20 @@
 
 import { createClient } from '@/lib/supabase/server';
 
-// 클라우드 동기화 대상 텍스트/메타 상태. 사진과 음성은 별도 Storage 처리.
+// 클라우드 동기화 대상 텍스트/메타 상태. 사진 파일은 Storage, 메타는 여기서.
+export type CloudPhoto = {
+  id: string;
+  storagePath: string;
+  kind: 'image' | 'video';
+  description: string;
+  cornerName?: string;
+  droneShot?: boolean;
+  width?: number;
+  height?: number;
+  originalStoragePath?: string;
+  originalKind?: 'image' | 'video';
+};
+
 export type CloudState = {
   storeNameOverride?: string;
   duration?: number;
@@ -18,12 +31,7 @@ export type CloudState = {
   bgmVolume?: number;
   bgmMode?: string;
   script?: unknown;
-  photoCaptions?: string[]; // index별 캡션
-  photoDroneShots?: boolean[]; // index별 드론샷 여부
-  photoUrls?: string[]; // Supabase Storage 경로
-  photoWidths?: number[];
-  photoHeights?: number[];
-  photoKinds?: ('image' | 'video')[];
+  photos?: CloudPhoto[];
   renderMode?: 'browser' | 'server';
 };
 

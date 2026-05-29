@@ -11,7 +11,14 @@ import {
   saveCloudState,
   clearCloudState,
   type CloudState,
+  type CloudPhoto,
 } from './cloud-actions';
+import {
+  uploadPhotoToCloud,
+  downloadPhotoFromCloud,
+  removePhotoFromCloud,
+  removeAllMyPhotosFromCloud,
+} from './cloud-sync-client';
 import { StepIndicator } from './StepIndicator';
 import { VoicePreviewButton } from './VoicePreviewButton';
 import { clearAll, loadItem, saveItem } from './storage';
@@ -409,6 +416,61 @@ export default function VideoMakerPage() {
         )
           setBgmMode(state.bgmMode);
         if (state.script) setScript(state.script as ShortsScript);
+
+        // 사진 복원: Storage에서 다운로드 → File 객체 재구성
+        if (Array.isArray(state.photos) && state.photos.length > 0) {
+          const restored = await Promise.all(
+            state.photos.map(async (cp): Promise<CornerPhoto | null> => {
+              try {
+                const file = await downloadPhotoFromCloud(cp.storagePath);
+                if (!file) return null;
+                const previewUrl = URL.createObjectURL(file);
+                let originalFile: File | undefined;
+                let originalPreviewUrl: string | undefined;
+                if (cp.originalStoragePath) {
+                  const orig = await downloadPhotoFromCloud(
+                    cp.originalStoragePath,
+                  );
+                  if (orig) {
+                    originalFile = orig;
+                    originalPreviewUrl = URL.createObjectURL(orig);
+                  }
+                }
+                return {
+                  id: cp.id,
+                  file,
+                  previewUrl,
+                  kind: cp.kind,
+                  cornerName: cp.cornerName ?? '',
+                  description: cp.description ?? '',
+                  droneShot: cp.droneShot,
+                  width: cp.width,
+                  height: cp.height,
+                  storagePath: cp.storagePath,
+                  originalStoragePath: cp.originalStoragePath,
+                  originalFile,
+                  originalPreviewUrl,
+                  originalKind: cp.originalKind,
+                  droneAiStatus: cp.droneShot ? 'ready' : 'idle',
+                  uploadStatus: 'uploaded',
+                };
+              } catch {
+                return null;
+              }
+            }),
+          );
+          const ok = restored.filter((x): x is CornerPhoto => x !== null);
+          if (ok.length > 0) {
+            setPhotos((prev) => {
+              for (const p of prev) {
+                if (p.previewUrl) URL.revokeObjectURL(p.previewUrl);
+                if (p.originalPreviewUrl)
+                  URL.revokeObjectURL(p.originalPreviewUrl);
+              }
+              return ok;
+            });
+          }
+        }
       } catch {
         // 동기화 실패 시 IndexedDB 로컬 데이터로 폴백
       } finally {
@@ -421,10 +483,24 @@ export default function VideoMakerPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated]);
 
-  // 텍스트 상태 변경 시 클라우드에 디바운스 저장 (500ms)
+  // 텍스트 상태 변경 시 클라우드에 디바운스 저장 (500ms). 업로드 끝난 사진만 포함.
   const latestCloudPayloadRef = useRef<CloudState | null>(null);
   useEffect(() => {
     if (!cloudHydrated) return;
+    const cloudPhotos: CloudPhoto[] = photos
+      .filter((p) => !!p.storagePath)
+      .map((p) => ({
+        id: p.id,
+        storagePath: p.storagePath as string,
+        kind: p.kind,
+        description: p.description ?? '',
+        cornerName: p.cornerName ?? '',
+        droneShot: p.droneShot,
+        width: p.width,
+        height: p.height,
+        originalStoragePath: p.originalStoragePath,
+        originalKind: p.originalKind,
+      }));
     const payload: CloudState = {
       storeNameOverride: storeNameLocked ? undefined : storeName,
       duration,
@@ -439,6 +515,7 @@ export default function VideoMakerPage() {
       bgmVolume,
       bgmMode,
       script: script ?? undefined,
+      photos: cloudPhotos,
     };
     latestCloudPayloadRef.current = payload;
     const t = setTimeout(() => {
@@ -461,7 +538,64 @@ export default function VideoMakerPage() {
     bgmVolume,
     bgmMode,
     script,
+    photos,
   ]);
+
+  // 사진이 추가되거나 드론샷이 적용되면 백그라운드로 Storage에 업로드.
+  // cloudHydrated 이후만 동작 (초기 cloud 복원 시 중복 업로드 방지).
+  useEffect(() => {
+    if (!cloudHydrated) return;
+    const toUpload = photos.filter(
+      (p) =>
+        (!p.storagePath && p.uploadStatus !== 'uploading') ||
+        (p.originalFile && !p.originalStoragePath),
+    );
+    if (toUpload.length === 0) return;
+    // 진행 중 표시 (중복 방지)
+    setPhotos((prev) =>
+      prev.map((p) =>
+        toUpload.find((t) => t.id === p.id)
+          ? { ...p, uploadStatus: 'uploading' }
+          : p,
+      ),
+    );
+    (async () => {
+      for (const p of toUpload) {
+        const tasks: Array<Promise<void>> = [];
+        if (!p.storagePath) {
+          tasks.push(
+            uploadPhotoToCloud(p.id, p.file).then((path) => {
+              if (!path) return;
+              setPhotos((prev) =>
+                prev.map((x) =>
+                  x.id === p.id
+                    ? { ...x, storagePath: path, uploadStatus: 'uploaded' }
+                    : x,
+                ),
+              );
+            }),
+          );
+        }
+        if (p.originalFile && !p.originalStoragePath) {
+          tasks.push(
+            uploadPhotoToCloud(p.id, p.originalFile, { isOriginal: true }).then(
+              (path) => {
+                if (!path) return;
+                setPhotos((prev) =>
+                  prev.map((x) =>
+                    x.id === p.id ? { ...x, originalStoragePath: path } : x,
+                  ),
+                );
+              },
+            ),
+          );
+        }
+        await Promise.all(tasks).catch(() => undefined);
+      }
+    })();
+    // photos 변경 시마다 재평가 (uploadStatus 가드로 중복 방지)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cloudHydrated, photos.length, photos.map((p) => p.id + (p.droneShot ? '!' : '')).join(',')]);
 
   // 로그아웃/페이지 이탈 직전 강제 flush. LogoutButton/beforeunload에서 호출.
   useEffect(() => {
@@ -522,6 +656,7 @@ export default function VideoMakerPage() {
     }
     await clearAll();
     clearCloudState().catch(() => {});
+    removeAllMyPhotosFromCloud().catch(() => {});
     // 블롭 URL 정리
     for (const p of photos) {
       if (p.previewUrl) URL.revokeObjectURL(p.previewUrl);
@@ -616,7 +751,17 @@ export default function VideoMakerPage() {
   const onRemove = (id: string) => {
     setPhotos((p) => {
       const target = p.find((x) => x.id === id);
-      if (target) URL.revokeObjectURL(target.previewUrl);
+      if (target) {
+        URL.revokeObjectURL(target.previewUrl);
+        if (target.originalPreviewUrl)
+          URL.revokeObjectURL(target.originalPreviewUrl);
+        if (target.storagePath)
+          removePhotoFromCloud(target.storagePath).catch(() => undefined);
+        if (target.originalStoragePath)
+          removePhotoFromCloud(target.originalStoragePath).catch(
+            () => undefined,
+          );
+      }
       return p.filter((x) => x.id !== id);
     });
   };
@@ -681,6 +826,10 @@ export default function VideoMakerPage() {
                 originalFile: x.originalFile ?? x.file,
                 originalPreviewUrl: x.originalPreviewUrl ?? x.previewUrl,
                 originalKind: x.originalKind ?? x.kind,
+                // 기존 storagePath는 원본 보관 위치로 옮기고, 신규 드론 파일은 다시 업로드
+                originalStoragePath: x.originalStoragePath ?? x.storagePath,
+                storagePath: undefined,
+                uploadStatus: 'idle',
                 file: newFile,
                 previewUrl: localUrl,
                 kind: 'image',
@@ -715,11 +864,18 @@ export default function VideoMakerPage() {
         if (x.previewUrl !== x.originalPreviewUrl) {
           URL.revokeObjectURL(x.previewUrl);
         }
+        // 드론 결과물(현재 storagePath) 삭제하고 원본 경로로 복귀
+        if (x.storagePath && x.storagePath !== x.originalStoragePath) {
+          removePhotoFromCloud(x.storagePath).catch(() => undefined);
+        }
         return {
           ...x,
           file: x.originalFile,
           previewUrl: x.originalPreviewUrl,
           kind: x.originalKind ?? 'image',
+          storagePath: x.originalStoragePath,
+          originalStoragePath: undefined,
+          uploadStatus: x.originalStoragePath ? 'uploaded' : 'idle',
           droneShot: false,
           droneAiStatus: 'idle',
           droneAiError: undefined,
