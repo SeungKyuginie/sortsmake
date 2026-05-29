@@ -19,13 +19,13 @@ export default async function Home() {
     <main className="mx-auto flex min-h-screen max-w-3xl flex-col items-center justify-center px-4 py-12">
       <div className="w-full text-center">
         <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
-          마트 숏츠 메이커 🎬
+          숏츠 메이커 🎬
         </h1>
         <p className="mt-4 text-base text-gray-600 sm:text-lg">
           매장 사진 11장으로 30초 유튜브 숏츠를 자동 제작합니다.
         </p>
         <p className="mt-2 text-sm text-gray-500">
-          AI 스크립트 · 카라오케 자막 · 음성 합성 · 배경음악 · 1080×1920 MP4
+          자동 스크립트 · 카라오케 자막 · 음성 합성 · 배경음악 · 1080×1920 MP4
         </p>
 
         <div className="mt-10 grid grid-cols-1 gap-4 text-left sm:grid-cols-3">

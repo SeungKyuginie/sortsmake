@@ -1338,7 +1338,7 @@ export default function VideoMakerPage() {
       <header className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
-            마트 숏츠 메이커 🎬
+            숏츠 메이커 🎬
           </h1>
           <p className="mt-1 text-sm text-gray-600">
             유튜브 숏츠 전문가 패턴 — 3초 후킹 · 카라오케 자막 · 블러 커버 · CTA — 으로 1080×1920 MP4를 자동 생성합니다.

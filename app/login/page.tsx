@@ -25,7 +25,7 @@ export default async function LoginPage({ searchParams }: Props) {
     <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center px-4">
       <div className="card w-full">
         <h1 className="text-center text-2xl font-bold tracking-tight">
-          마트 숏츠 메이커 🎬
+          숏츠 메이커 🎬
         </h1>
         <p className="mt-2 text-center text-sm text-gray-600">
           관리자가 발급한 아이디와 비밀번호로 로그인하세요.

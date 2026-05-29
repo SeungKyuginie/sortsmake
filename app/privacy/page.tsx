@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-export const metadata = { title: '개인정보처리방침 — 마트 숏츠 메이커' };
+export const metadata = { title: '개인정보처리방침 — 숏츠 메이커' };
 
 export default function PrivacyPage() {
   return (

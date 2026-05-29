@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-export const metadata = { title: '이용약관 — 마트 숏츠 메이커' };
+export const metadata = { title: '이용약관 — 숏츠 메이커' };
 
 export default function TermsPage() {
   return (
@@ -17,7 +17,7 @@ export default function TermsPage() {
         <div>
           <h2 className="text-lg font-semibold">제1조 (목적)</h2>
           <p>
-            이 약관은 주식회사 인스로드(이하 “회사”)가 운영하는 “마트 숏츠
+            이 약관은 주식회사 인스로드(이하 “회사”)가 운영하는 “숏츠
             메이커”(이하 “서비스”)의 이용 조건 및 절차, 회사와 이용자의 권리·
             의무 및 책임사항을 규정함을 목적으로 합니다.
           </p>
