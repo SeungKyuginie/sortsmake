@@ -954,16 +954,14 @@ export default function VideoMakerPage() {
   };
 
   const handleDownload = () => {
-    if (!videoBlob) return;
+    if (!videoBlob || !videoUrl) return;
     const a = document.createElement('a');
-    const url = URL.createObjectURL(videoBlob);
-    a.href = url;
+    a.href = videoUrl;
     const safeStore = (storeName || 'mart').replace(/[^\w가-힣-]/g, '_');
     a.download = `${safeStore}_shorts_${Date.now()}.mp4`;
     document.body.appendChild(a);
     a.click();
     a.remove();
-    URL.revokeObjectURL(url);
   };
 
   // 스크립트 수정
