@@ -92,11 +92,11 @@ export function PhotoUploader({
                   />
                 )}
                 <div className="min-w-0 flex-1 space-y-2">
-                  <div className="flex items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
                     <span className="text-xs font-semibold text-gray-500">
                       #{idx + 1} {p.kind === 'video' ? '🎬 영상' : '🖼 사진'}
                     </span>
-                    <div className="flex items-center gap-1">
+                    <div className="flex flex-wrap items-center justify-end gap-1">
                       {!hideDroneButton && p.kind === 'image' && !p.droneShot && (
                         <button
                           type="button"
