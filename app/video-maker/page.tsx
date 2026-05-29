@@ -1335,7 +1335,7 @@ export default function VideoMakerPage() {
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-8">
-      <header className="mb-8 flex items-start justify-between gap-4">
+      <header className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
             마트 숏츠 메이커 🎬
@@ -1350,13 +1350,13 @@ export default function VideoMakerPage() {
             프로그램 제작: 주식회사 인스로드
           </p>
         </div>
-        <div className="flex shrink-0 flex-col items-end gap-1">
-          <div className="flex items-start gap-2">
+        <div className="flex shrink-0 flex-col items-start gap-1 sm:items-end">
+          <div className="flex flex-wrap items-start gap-2">
             <button
               type="button"
               onClick={handleManualSave}
               disabled={manualSaving}
-              className="btn-secondary shrink-0 text-sm"
+              className="btn-secondary shrink-0 text-xs sm:text-sm"
               title="현재 작업 내용을 즉시 클라우드에 저장 (다른 기기에서 이어서 작업 가능)"
             >
               {manualSaving
@@ -1369,7 +1369,7 @@ export default function VideoMakerPage() {
             <button
               type="button"
               onClick={handleReset}
-              className="btn-secondary shrink-0 text-sm text-red-600"
+              className="btn-secondary shrink-0 text-xs text-red-600 sm:text-sm"
               title="모든 작업 내용 삭제"
             >
               🔄 초기화

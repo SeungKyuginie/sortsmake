@@ -12,7 +12,7 @@ export function LogoutButton() {
     <button
       type="button"
       disabled={pending}
-      className="btn-secondary shrink-0 text-sm text-gray-700"
+      className="btn-secondary shrink-0 text-xs text-gray-700 sm:text-sm"
       title="로그아웃 (작업 내용 초기화됨)"
       onClick={() => {
         if (
