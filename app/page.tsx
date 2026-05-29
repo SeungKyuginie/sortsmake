@@ -11,7 +11,14 @@ export default async function Home() {
       data: { user },
     } = await supabase.auth.getUser();
     if (user) {
-      redirect(isAdminEmail(user.email) ? '/admin' : '/video-maker');
+      if (isAdminEmail(user.email)) {
+        redirect('/admin');
+      }
+      const bt =
+        typeof user.user_metadata?.businessType === 'string'
+          ? user.user_metadata.businessType
+          : '';
+      redirect(bt === 'photo_studio' ? '/photo-maker' : '/video-maker');
     }
   }
 

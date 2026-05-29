@@ -18,15 +18,24 @@ export async function signInAction(
     return { error: '아이디 형식이 올바르지 않습니다.' };
   }
   const supabase = createClient();
-  const { error } = await supabase.auth.signInWithPassword({
+  const { data, error } = await supabase.auth.signInWithPassword({
     email: usernameToEmail(username),
     password: input.password,
   });
   if (error) {
     return { error: '아이디 또는 비밀번호가 올바르지 않습니다.' };
   }
-  const redirectTo = isAdminUsername(username) ? '/admin' : input.redirectTo;
-  return { redirectTo };
+  if (isAdminUsername(username)) {
+    return { redirectTo: '/admin' };
+  }
+  const businessType =
+    typeof data.user?.user_metadata?.businessType === 'string'
+      ? data.user.user_metadata.businessType
+      : '';
+  if (businessType === 'photo_studio') {
+    return { redirectTo: '/photo-maker' };
+  }
+  return { redirectTo: input.redirectTo };
 }
 
 export async function signOutAction() {
