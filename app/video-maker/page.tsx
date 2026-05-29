@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { encodeImageForClaude, encodeVideoFirstFrame } from './encodeImage';
 import { BgmLibrary } from './BgmLibrary';
 import { PhotoUploader } from './PhotoUploader';
@@ -421,7 +421,8 @@ export default function VideoMakerPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated]);
 
-  // 텍스트 상태 변경 시 클라우드에 디바운스 저장 (1.5초)
+  // 텍스트 상태 변경 시 클라우드에 디바운스 저장 (500ms)
+  const latestCloudPayloadRef = useRef<CloudState | null>(null);
   useEffect(() => {
     if (!cloudHydrated) return;
     const payload: CloudState = {
@@ -439,9 +440,10 @@ export default function VideoMakerPage() {
       bgmMode,
       script: script ?? undefined,
     };
+    latestCloudPayloadRef.current = payload;
     const t = setTimeout(() => {
       saveCloudState(payload).catch(() => {});
-    }, 1500);
+    }, 500);
     return () => clearTimeout(t);
   }, [
     cloudHydrated,
@@ -460,6 +462,22 @@ export default function VideoMakerPage() {
     bgmMode,
     script,
   ]);
+
+  // 로그아웃/페이지 이탈 직전 강제 flush. LogoutButton/beforeunload에서 호출.
+  useEffect(() => {
+    const flush = async () => {
+      if (latestCloudPayloadRef.current) {
+        await saveCloudState(latestCloudPayloadRef.current).catch(() => {});
+      }
+    };
+    (window as Window & { __flushCloudState?: () => Promise<void> }).__flushCloudState = flush;
+    const onHide = () => { flush(); };
+    window.addEventListener('pagehide', onHide);
+    return () => {
+      window.removeEventListener('pagehide', onHide);
+      delete (window as Window & { __flushCloudState?: () => Promise<void> }).__flushCloudState;
+    };
+  }, []);
 
   // 상태 변화 시 자동 저장 (하이드레이션 이후만)
   useEffect(() => { if (hydrated) saveItem('storeName', storeName); }, [hydrated, storeName]);

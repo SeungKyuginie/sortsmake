@@ -22,10 +22,21 @@ export function LogoutButton() {
         )
           return;
         startTransition(async () => {
+          // 클라우드 강제 저장 (디바운스 대기 없이 즉시 동기화)
+          const flush = (
+            window as Window & { __flushCloudState?: () => Promise<void> }
+          ).__flushCloudState;
+          if (flush) {
+            try {
+              await flush();
+            } catch {
+              // 클라우드 저장 실패해도 로그아웃 진행
+            }
+          }
           try {
             await clearAll();
           } catch {
-            // 로컬 삭제 실패해도 로그아웃은 계속 진행
+            // 로컬 삭제 실패해도 로그아웃 진행
           }
           await signOutAction();
           router.replace('/login');
