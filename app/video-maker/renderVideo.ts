@@ -16,8 +16,8 @@ const FPS = 30;
 
 // 숏츠 안전영역(1080×1920 기준 상단 180 / 하단 390 / 좌우 60 픽셀 회피).
 // — 출처: Kreatli, Opus.pro safe-zone 가이드.
-// 자막은 중앙(50%)이 retention 표준. hook/cta는 상단 18%에 두어 시선 잡기.
-const PHRASE_Y = Math.round(HEIGHT * 0.50);
+// 자막은 하단(72%)에 배치 — 시청자 시선이 자연스럽게 흐름. hook/cta는 상단 18%.
+const PHRASE_Y = Math.round(HEIGHT * 0.72);
 const HOOK_Y = Math.round(HEIGHT * 0.18);
 const CTA_Y = Math.round(HEIGHT * 0.18);
 
