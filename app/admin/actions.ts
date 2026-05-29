@@ -19,6 +19,7 @@ async function requireAdmin() {
 export async function createUserAction(input: {
   username: string;
   password: string;
+  storeName: string;
 }): Promise<{ error?: string }> {
   try {
     await requireAdmin();
@@ -26,11 +27,18 @@ export async function createUserAction(input: {
     return { error: e instanceof Error ? e.message : String(e) };
   }
   const username = input.username.trim().toLowerCase();
+  const storeName = input.storeName.trim();
   if (!isValidUsername(username)) {
     return { error: '아이디는 영문/숫자/._-, 3~32자만 가능합니다.' };
   }
   if (!input.password || input.password.length < 6) {
     return { error: '비밀번호는 6자 이상이어야 합니다.' };
+  }
+  if (!storeName) {
+    return { error: '매장명을 입력하세요.' };
+  }
+  if (storeName.length > 60) {
+    return { error: '매장명은 60자 이하여야 합니다.' };
   }
   try {
     const admin = createAdminClient();
@@ -38,6 +46,7 @@ export async function createUserAction(input: {
       email: usernameToEmail(username),
       password: input.password,
       email_confirm: true,
+      user_metadata: { storeName },
     });
     if (error) {
       return { error: error.message };
@@ -86,6 +95,43 @@ export async function resetPasswordAction(input: {
     const admin = createAdminClient();
     const { error } = await admin.auth.admin.updateUserById(input.userId, {
       password: input.newPassword,
+    });
+    if (error) {
+      return { error: error.message };
+    }
+    revalidatePath('/admin');
+    return {};
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+export async function updateStoreNameAction(input: {
+  userId: string;
+  storeName: string;
+}): Promise<{ error?: string }> {
+  try {
+    await requireAdmin();
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
+  const storeName = input.storeName.trim();
+  if (!storeName) {
+    return { error: '매장명을 입력하세요.' };
+  }
+  if (storeName.length > 60) {
+    return { error: '매장명은 60자 이하여야 합니다.' };
+  }
+  try {
+    const admin = createAdminClient();
+    // 기존 user_metadata를 보존하면서 storeName만 갱신
+    const { data: cur, error: getErr } = await admin.auth.admin.getUserById(
+      input.userId,
+    );
+    if (getErr) return { error: getErr.message };
+    const merged = { ...(cur.user?.user_metadata ?? {}), storeName };
+    const { error } = await admin.auth.admin.updateUserById(input.userId, {
+      user_metadata: merged,
     });
     if (error) {
       return { error: error.message };

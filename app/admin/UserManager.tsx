@@ -6,11 +6,13 @@ import {
   createUserAction,
   deleteUserAction,
   resetPasswordAction,
+  updateStoreNameAction,
 } from './actions';
 
 type User = {
   id: string;
   username: string;
+  storeName: string;
   createdAt: string;
 };
 
@@ -25,6 +27,7 @@ export function UserManager({ users, adminUsername }: Props) {
   const [info, setInfo] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [resetTarget, setResetTarget] = useState<User | null>(null);
+  const [storeTarget, setStoreTarget] = useState<User | null>(null);
 
   const refresh = () => router.refresh();
 
@@ -33,25 +36,29 @@ export function UserManager({ users, adminUsername }: Props) {
       <section className="card">
         <h2 className="text-lg font-semibold">새 사용자 추가</h2>
         <p className="mt-1 text-xs text-gray-500">
-          아이디와 비밀번호를 직접 입력해 발급하세요. 아이디는 영문/숫자/._-,
-          3~32자.
+          아이디는 영문/숫자/._-, 3~32자. 매장명은 영상 생성 시 자동으로 사용됩니다.
         </p>
         <form
-          className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1fr_auto]"
+          className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2"
           onSubmit={(e) => {
             e.preventDefault();
             const fd = new FormData(e.currentTarget);
             const username = String(fd.get('username') ?? '');
             const password = String(fd.get('password') ?? '');
+            const storeName = String(fd.get('storeName') ?? '');
             setError(null);
             setInfo(null);
             startTransition(async () => {
-              const res = await createUserAction({ username, password });
+              const res = await createUserAction({
+                username,
+                password,
+                storeName,
+              });
               if (res?.error) {
                 setError(res.error);
                 return;
               }
-              setInfo(`${username} 사용자가 추가됐습니다.`);
+              setInfo(`${username} (${storeName}) 사용자가 추가됐습니다.`);
               (e.target as HTMLFormElement).reset();
               refresh();
             });
@@ -76,7 +83,20 @@ export function UserManager({ users, adminUsername }: Props) {
             autoComplete="off"
             className="input"
           />
-          <button type="submit" disabled={pending} className="btn-primary">
+          <input
+            name="storeName"
+            type="text"
+            required
+            maxLength={60}
+            placeholder="매장명 (예: 하나마트 강남점)"
+            autoComplete="off"
+            className="input sm:col-span-2"
+          />
+          <button
+            type="submit"
+            disabled={pending}
+            className="btn-primary sm:col-span-2"
+          >
             {pending ? '추가 중…' : '추가'}
           </button>
         </form>
@@ -109,19 +129,30 @@ export function UserManager({ users, adminUsername }: Props) {
                   className="flex flex-wrap items-center justify-between gap-2 py-3"
                 >
                   <div className="min-w-0">
-                    <div className="truncate text-sm font-medium text-gray-900">
-                      {u.username}
+                    <div className="flex flex-wrap items-center gap-2 text-sm font-medium text-gray-900">
+                      <span className="truncate">{u.username}</span>
                       {isSelf ? (
-                        <span className="ml-2 rounded bg-brand-100 px-2 py-0.5 text-xs text-brand-700">
+                        <span className="rounded bg-brand-100 px-2 py-0.5 text-xs text-brand-700">
                           나(관리자)
                         </span>
                       ) : null}
+                      <span className="text-xs text-gray-500">
+                        {u.storeName ? `· ${u.storeName}` : '· (매장명 없음)'}
+                      </span>
                     </div>
                     <div className="text-xs text-gray-500">
                       가입: {new Date(u.createdAt).toLocaleString('ko-KR')}
                     </div>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={pending}
+                      className="btn-secondary text-xs"
+                      onClick={() => setStoreTarget(u)}
+                    >
+                      매장명 변경
+                    </button>
                     <button
                       type="button"
                       disabled={pending}
@@ -207,6 +238,68 @@ export function UserManager({ users, adminUsername }: Props) {
                 type="button"
                 className="btn-secondary text-sm"
                 onClick={() => setResetTarget(null)}
+              >
+                취소
+              </button>
+              <button
+                type="submit"
+                disabled={pending}
+                className="btn-primary text-sm"
+              >
+                {pending ? '변경 중…' : '변경'}
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
+
+      {storeTarget ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setStoreTarget(null)}
+        >
+          <form
+            className="card w-full max-w-sm"
+            onClick={(e) => e.stopPropagation()}
+            onSubmit={(e) => {
+              e.preventDefault();
+              const fd = new FormData(e.currentTarget);
+              const storeName = String(fd.get('storeName') ?? '');
+              setError(null);
+              setInfo(null);
+              startTransition(async () => {
+                const res = await updateStoreNameAction({
+                  userId: storeTarget.id,
+                  storeName,
+                });
+                if (res?.error) {
+                  setError(res.error);
+                  return;
+                }
+                setInfo(`${storeTarget.username} 매장명이 변경됐습니다.`);
+                setStoreTarget(null);
+                refresh();
+              });
+            }}
+          >
+            <h3 className="text-base font-semibold">
+              매장명 변경 — {storeTarget.username}
+            </h3>
+            <input
+              name="storeName"
+              type="text"
+              required
+              maxLength={60}
+              defaultValue={storeTarget.storeName}
+              placeholder="매장명"
+              autoComplete="off"
+              className="input mt-3"
+            />
+            <div className="mt-3 flex justify-end gap-2">
+              <button
+                type="button"
+                className="btn-secondary text-sm"
+                onClick={() => setStoreTarget(null)}
               >
                 취소
               </button>

@@ -26,7 +26,12 @@ export default async function AdminPage() {
     redirect('/video-maker');
   }
 
-  let userList: Array<{ id: string; username: string; createdAt: string }> = [];
+  let userList: Array<{
+    id: string;
+    username: string;
+    storeName: string;
+    createdAt: string;
+  }> = [];
   let listError: string | null = null;
   try {
     const admin = createAdminClient();
@@ -35,6 +40,10 @@ export default async function AdminPage() {
     userList = data.users.map((u) => ({
       id: u.id,
       username: emailToUsername(u.email) || '(이름 없음)',
+      storeName:
+        typeof u.user_metadata?.storeName === 'string'
+          ? u.user_metadata.storeName
+          : '',
       createdAt: u.created_at,
     }));
   } catch (e) {
