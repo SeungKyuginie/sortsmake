@@ -50,7 +50,7 @@ export type RenderInput = {
   items: RenderItem[];
   itemDurations: number[]; // sum === audioDurationSec
   droneShots?: boolean[]; // per-item drone shot flag (images only)
-  effectModes?: (('pan' | 'zoom_in' | 'zoom_out') | undefined)[]; // per-item motion effect (undefined = default panRatio)
+  effectModes?: (('static' | 'pan' | 'zoom_in' | 'zoom_out') | undefined)[]; // per-item motion effect (undefined = default panRatio)
   // 'cover': 사진을 화면에 꽉 채움 (현재 동작, 가로 사진 좌우 패닝)
   // 'blur': 사진을 살짝만 확대 + 위아래 블러 + 전체 가로 풀 패닝
   frameStyle?: 'cover' | 'blur';
@@ -226,7 +226,7 @@ function buildItemChain(
   srcWidth?: number,
   srcHeight?: number,
   panRatio = 0.6,
-  effectMode: 'pan' | 'zoom_in' | 'zoom_out' | undefined = undefined,
+  effectMode: 'static' | 'pan' | 'zoom_in' | 'zoom_out' | undefined = undefined,
 ): string {
   const Tstr = T.toFixed(3);
 
@@ -308,6 +308,18 @@ function buildItemChain(
       `[${idx}:v]split=2[bg${idx}][fg${idx}];` +
       `[bg${idx}]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,` +
       `crop=${WIDTH}:${HEIGHT},boxblur=12:2,setsar=1[bgX${idx}];` +
+      `[fg${idx}]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=decrease,setsar=1[fgX${idx}];` +
+      `[bgX${idx}][fgX${idx}]overlay=(W-w)/2:(H-h)/2,` +
+      `fps=${FPS},format=yuv420p,setpts=PTS-STARTPTS[v${idx}]`
+    );
+  }
+
+  // 정지 효과: 모션 없이 사진을 화면에 꽉 채워 표시 (사진관 4초 고정).
+  if (!isVideo && effectMode === 'static') {
+    return (
+      `[${idx}:v]split=2[bg${idx}][fg${idx}];` +
+      `[bg${idx}]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,` +
+      `crop=${WIDTH}:${HEIGHT},boxblur=24:4,setsar=1[bgX${idx}];` +
       `[fg${idx}]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=decrease,setsar=1[fgX${idx}];` +
       `[bgX${idx}][fgX${idx}]overlay=(W-w)/2:(H-h)/2,` +
       `fps=${FPS},format=yuv420p,setpts=PTS-STARTPTS[v${idx}]`

@@ -264,6 +264,18 @@ function buildItemChain(idx, T, opts) {
     );
   }
 
+  // 정지: 모션 없이 화면에 꽉 채워 표시 (사진관 N초 고정)
+  if (!isVideo && effectMode === 'static') {
+    return (
+      `[${idx}:v]split=2[bg${idx}][fg${idx}];` +
+      `[bg${idx}]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,` +
+      `crop=${WIDTH}:${HEIGHT},boxblur=24:4,setsar=1[bgX${idx}];` +
+      `[fg${idx}]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=decrease,setsar=1[fgX${idx}];` +
+      `[bgX${idx}][fgX${idx}]overlay=(W-w)/2:(H-h)/2,` +
+      `fps=${FPS},format=yuv420p,setpts=PTS-STARTPTS[v${idx}]`
+    );
+  }
+
   // 줌인/줌아웃 (이미지 전용, 1.0 ↔ 1.2)
   if (!isVideo && (effectMode === 'zoom_in' || effectMode === 'zoom_out')) {
     const frames = Math.max(2, Math.round(T * FPS));

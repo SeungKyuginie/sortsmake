@@ -127,41 +127,36 @@ export function PhotoUploader({
                           🚁 드론샷 적용됨
                         </button>
                       )}
-                      {showFixedDurationButton && (
-                        <button
-                          type="button"
-                          title={
-                            p.fixedDurationSec
-                              ? `${p.fixedDurationSec}초 고정 적용됨 (클릭 시 해제)`
-                              : `${fixedDurationSec}초 고정으로 표시`
-                          }
-                          className={`whitespace-nowrap px-2 py-1 text-xs rounded border font-medium transition ${
-                            p.fixedDurationSec
-                              ? 'bg-amber-500 text-white border-amber-500'
-                              : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100'
-                          }`}
-                          onClick={() =>
-                            onUpdate(p.id, {
-                              fixedDurationSec: p.fixedDurationSec
-                                ? undefined
-                                : fixedDurationSec,
-                            })
-                          }
-                        >
-                          ⏱{fixedDurationSec}s
-                        </button>
-                      )}
                       {showEffectButtons && p.kind === 'image' && !p.droneShot && (
                         <div
                           className="inline-flex overflow-hidden rounded border border-gray-300"
-                          title="이 사진의 모션 효과 선택"
+                          title="이 사진의 모션 효과 (한 개만 선택)"
                         >
                           {(
                             [
-                              { v: 'pan', l: '↔', t: '패닝' },
-                              { v: 'zoom_in', l: '🔍+', t: '줌인' },
-                              { v: 'zoom_out', l: '🔍-', t: '줌아웃' },
-                            ] as const
+                              showFixedDurationButton && {
+                                v: 'static' as const,
+                                l: `⏱${fixedDurationSec}s`,
+                                t: `${fixedDurationSec}초 정지 (움직임 없음)`,
+                              },
+                              {
+                                v: 'pan' as const,
+                                l: '↔',
+                                t: '패닝 (좌우 풀)',
+                              },
+                              {
+                                v: 'zoom_in' as const,
+                                l: '🔍+',
+                                t: '줌인 (점점 확대)',
+                              },
+                              {
+                                v: 'zoom_out' as const,
+                                l: '🔍-',
+                                t: '줌아웃 (점점 축소)',
+                              },
+                            ]
+                              .filter(Boolean)
+                              .map((o) => o as { v: 'static' | 'pan' | 'zoom_in' | 'zoom_out'; l: string; t: string })
                           ).map((opt) => {
                             const active =
                               (p.effectMode ?? 'pan') === opt.v;
@@ -170,14 +165,26 @@ export function PhotoUploader({
                                 key={opt.v}
                                 type="button"
                                 title={opt.t}
-                                className={`whitespace-nowrap px-2 py-1 text-xs font-medium ${
+                                className={`whitespace-nowrap px-2 py-1 text-xs font-medium transition ${
                                   active
-                                    ? 'bg-brand-500 text-white'
+                                    ? opt.v === 'static'
+                                      ? 'bg-amber-500 text-white'
+                                      : 'bg-brand-500 text-white'
                                     : 'bg-white text-gray-700 hover:bg-gray-100'
                                 }`}
-                                onClick={() =>
-                                  onUpdate(p.id, { effectMode: opt.v })
-                                }
+                                onClick={() => {
+                                  if (opt.v === 'static') {
+                                    onUpdate(p.id, {
+                                      effectMode: 'static',
+                                      fixedDurationSec,
+                                    });
+                                  } else {
+                                    onUpdate(p.id, {
+                                      effectMode: opt.v,
+                                      fixedDurationSec: undefined,
+                                    });
+                                  }
+                                }}
                               >
                                 {opt.l}
                               </button>
