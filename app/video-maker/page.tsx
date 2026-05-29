@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { encodeImageForClaude, encodeVideoFirstFrame } from './encodeImage';
 import { BgmLibrary } from './BgmLibrary';
 import { PhotoUploader } from './PhotoUploader';
+import { LogoutButton } from './LogoutButton';
 import { StepIndicator } from './StepIndicator';
 import { VoicePreviewButton } from './VoicePreviewButton';
 import { clearAll, loadItem, saveItem } from './storage';
@@ -1025,14 +1026,17 @@ export default function VideoMakerPage() {
             프로그램 제작: 주식회사 인스로드
           </p>
         </div>
-        <button
-          type="button"
-          onClick={handleReset}
-          className="btn-secondary shrink-0 text-sm text-red-600"
-          title="모든 작업 내용 삭제"
-        >
-          🔄 초기화
-        </button>
+        <div className="flex shrink-0 items-start gap-2">
+          <LogoutButton />
+          <button
+            type="button"
+            onClick={handleReset}
+            className="btn-secondary shrink-0 text-sm text-red-600"
+            title="모든 작업 내용 삭제"
+          >
+            🔄 초기화
+          </button>
+        </div>
       </header>
 
       <section className="card mb-6">
