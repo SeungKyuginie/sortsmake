@@ -6,7 +6,6 @@ import { BgmLibrary } from './BgmLibrary';
 import { PhotoUploader } from './PhotoUploader';
 import { LogoutButton } from './LogoutButton';
 import { getMyStoreName } from './me-actions';
-import { makeSilentWavBlob } from './silentAudio';
 import {
   loadCloudState,
   saveCloudState,
@@ -139,10 +138,6 @@ export default function VideoMakerPage() {
   // step 1
   const [storeName, setStoreName] = useState('');
   const [storeNameLocked, setStoreNameLocked] = useState(false);
-  const [businessType, setBusinessType] = useState<string>('');
-  // 자동 스크립트/음성 사용 여부. 사진관 같은 업종은 둘 다 꺼두고 사진+BGM만 영상화.
-  const [useScript, setUseScript] = useState(true);
-  const [useVoice, setUseVoice] = useState(true);
   const [photos, setPhotos] = useState<CornerPhoto[]>([]);
   const [duration, setDuration] = useState(30);
   // 프레임 스타일: cover(꽉 채우기, 현재 동작) / blur(블러 액자 + 풀 가로 패닝)
@@ -279,7 +274,6 @@ export default function VideoMakerPage() {
         sScript, sVoice,
         sBgmMode, sBgmFile, sBgmVolume, sBgmPrompt,
         sVideoBlob,
-        sUseScript, sUseVoice,
       ] = await Promise.all([
         loadItem<string>('storeName'),
         loadItem<number>('duration'),
@@ -302,8 +296,6 @@ export default function VideoMakerPage() {
         loadItem<number>('bgmVolume'),
         loadItem<string>('bgmPrompt'),
         loadItem<Blob>('videoBlob'),
-        loadItem<boolean>('useScript'),
-        loadItem<boolean>('useVoice'),
       ]);
       if (cancelled) return;
 
@@ -339,8 +331,6 @@ export default function VideoMakerPage() {
       if (typeof sBgmVolume === 'number') setBgmVolume(sBgmVolume);
       if (sBgmPrompt) setBgmPrompt(sBgmPrompt);
       if (sVideoBlob) setVideoBlob(sVideoBlob);
-      if (typeof sUseScript === 'boolean') setUseScript(sUseScript);
-      if (typeof sUseVoice === 'boolean') setUseVoice(sUseVoice);
 
       // 단계 표시 자동 복원 — 어디까지 진행됐는지 추론
       const nextSteps = [...INITIAL_STEPS];
@@ -369,19 +359,11 @@ export default function VideoMakerPage() {
     let cancelled = false;
     (async () => {
       try {
-        const { storeName: s, businessType: bt } = await getMyStoreName();
+        const { storeName: s } = await getMyStoreName();
         if (cancelled) return;
         if (s) {
           setStoreName(s);
           setStoreNameLocked(true);
-        }
-        if (bt) {
-          setBusinessType(bt);
-          // 마트 사용자는 토글이 보이지 않으므로 항상 ON 강제
-          if (bt === 'mart') {
-            setUseScript(true);
-            setUseVoice(true);
-          }
         }
       } catch {
         // 비로그인/오류 시 잠금 없이 사용 가능
@@ -398,34 +380,12 @@ export default function VideoMakerPage() {
     if (!hydrated || cloudHydrated) return;
     let cancelled = false;
     (async () => {
-      // 업종에 따라 useScript/useVoice 기본값 결정 (클라우드 값이 없을 때만 적용)
-      let businessType = '';
-      try {
-        const profile = await getMyStoreName();
-        businessType = profile.businessType ?? '';
-      } catch {
-        // ignore
-      }
       try {
         const { state } = await loadCloudState();
-        if (cancelled) {
+        if (cancelled || !state) {
           setCloudHydrated(true);
           return;
         }
-        if (!state) {
-          // 클라우드에 저장된 적 없음 → 업종 기본값 적용
-          if (businessType === 'photo_studio') {
-            setUseScript(false);
-            setUseVoice(false);
-          }
-          setCloudHydrated(true);
-          return;
-        }
-        // 클라우드 값 우선. 누락된 항목만 업종 기본값으로.
-        if (typeof state.useScript === 'boolean') setUseScript(state.useScript);
-        else if (businessType === 'photo_studio') setUseScript(false);
-        if (typeof state.useVoice === 'boolean') setUseVoice(state.useVoice);
-        else if (businessType === 'photo_studio') setUseVoice(false);
         // 텍스트/메타만 복원. 사진/음성 blob은 향후 단계에서 처리.
         if (
           state.storeNameOverride !== undefined &&
@@ -560,8 +520,6 @@ export default function VideoMakerPage() {
       bgmMode,
       script: script ?? undefined,
       photos: cloudPhotos,
-      useScript,
-      useVoice,
     };
     latestCloudPayloadRef.current = payload;
     const t = setTimeout(() => {
@@ -585,8 +543,6 @@ export default function VideoMakerPage() {
     bgmMode,
     script,
     photos,
-    useScript,
-    useVoice,
   ]);
 
   // 사진이 추가되거나 드론샷이 적용되면 백그라운드로 Storage에 업로드.
@@ -690,8 +646,6 @@ export default function VideoMakerPage() {
 
   // 상태 변화 시 자동 저장 (하이드레이션 이후만)
   useEffect(() => { if (hydrated) saveItem('storeName', storeName); }, [hydrated, storeName]);
-  useEffect(() => { if (hydrated) saveItem('useScript', useScript); }, [hydrated, useScript]);
-  useEffect(() => { if (hydrated) saveItem('useVoice', useVoice); }, [hydrated, useVoice]);
   useEffect(() => { if (hydrated) saveItem('duration', duration); }, [hydrated, duration]);
   useEffect(() => { if (hydrated) saveItem('frameStyle', frameStyle); }, [hydrated, frameStyle]);
   useEffect(() => { if (hydrated) saveItem('panRatio', panRatio); }, [hydrated, panRatio]);
@@ -1168,56 +1122,9 @@ export default function VideoMakerPage() {
   // ---------- Step 4: 렌더 ----------
   // 타임라인 빌더: hook + segments + cta → itemDurations + 절대 시간 phrases.
   const buildRenderTimeline = () => {
+    if (!script || !voice) throw new Error('스크립트 또는 음성이 없습니다.');
     const N = photos.length;
     if (N === 0) throw new Error('사진이 없습니다.');
-
-    // 음성 미사용: 고정 시간 사진은 그 값, 나머지는 남은 시간 균등 분배
-    if (!useVoice) {
-      const fixedSum = photos.reduce(
-        (acc, p) => acc + (p.fixedDurationSec ?? 0),
-        0,
-      );
-      const flexCount = photos.filter((p) => !p.fixedDurationSec).length;
-      const remaining = Math.max(0, duration - fixedSum);
-      const each = flexCount > 0 ? remaining / flexCount : 0;
-      const itemDurations = photos.map((p) =>
-        p.fixedDurationSec ?? (flexCount > 0 ? each : 0),
-      );
-      // 모든 사진이 고정이면 총 길이가 fixedSum이 되도록
-      // (사용자 duration 설정 무시) — 모자란 경우엔 그대로 유지
-      const totalDur = flexCount > 0
-        ? Math.max(duration, fixedSum)
-        : Math.max(fixedSum, 0.5);
-      const phrases: RenderPhrase[] = [];
-      // 스크립트 사용 시에만 자막 표시 (음성 없이도 자막은 표시 가능)
-      if (useScript && script) {
-        let cursor = 0;
-        for (let i = 0; i < N; i++) {
-          const seg = script.segments[i];
-          const text = (seg?.text ?? '').trim();
-          const len = itemDurations[i];
-          if (text && len > 0) {
-            phrases.push({
-              text,
-              start: cursor,
-              end: cursor + len,
-              highlight: false,
-            });
-          }
-          cursor += len;
-        }
-      }
-      return {
-        itemDurations,
-        phrases,
-        hookStart: 0,
-        hookEnd: 0,
-        ctaStart: totalDur,
-        ctaEnd: totalDur,
-      };
-    }
-
-    if (!script || !voice) throw new Error('스크립트 또는 음성이 없습니다.');
     const cornerDurs = voice.cornerDurs.slice();
     // 코너 수 != 사진 수면 균등 분배로 보정
     if (cornerDurs.length !== N) {
@@ -1269,9 +1176,7 @@ export default function VideoMakerPage() {
   };
 
   const handleRender = async () => {
-    if (photos.length === 0) return;
-    if (useVoice && (!voice || !script)) return;
-    if (useScript && !useVoice && !script) return;
+    if (!voice || !script) return;
     setError(null);
     setRendering(true);
     setVideoBlob(null);
@@ -1282,16 +1187,6 @@ export default function VideoMakerPage() {
     try {
       const { itemDurations, phrases, hookStart, hookEnd, ctaStart, ctaEnd } =
         buildRenderTimeline();
-
-      // 음성 미사용 시 무음 WAV 생성 (실제 itemDurations 합산으로 길이 맞춤)
-      const totalItemDur = itemDurations.reduce((a, b) => a + b, 0);
-      const audioBlob = useVoice && voice
-        ? voice.audioBlob
-        : makeSilentWavBlob(Math.max(0.5, totalItemDur));
-      const audioDurSec = useVoice && voice ? voice.totalDur : totalItemDur;
-      // 스크립트 미사용 시 hook/cta 텍스트 비움
-      const hookText = useScript && script ? script.hook : '';
-      const ctaText = useScript && script ? script.cta : '';
 
       // 렌더링 직전에 width/height 누락된 사진은 다시 측정 (블러 조건 보장)
       let photosForRender = photos;
@@ -1317,20 +1212,19 @@ export default function VideoMakerPage() {
               width: p.width,
               height: p.height,
               droneShot: p.droneShot,
-              effectMode: p.effectMode,
             })),
             itemDurations,
             frameStyle,
             panRatio,
             resolution,
-            audio: audioBlob,
-            audioDurationSec: audioDurSec,
+            audio: voice.audioBlob,
+            audioDurationSec: voice.totalDur,
             bgm: bgmFile,
             bgmVolume,
-            hookText,
+            hookText: script.hook,
             hookStart,
             hookEnd,
-            ctaText,
+            ctaText: script.cta,
             ctaStart,
             ctaEnd,
             phrases,
@@ -1352,21 +1246,18 @@ export default function VideoMakerPage() {
             })),
             itemDurations,
             droneShots: photosForRender.map((p) => p.droneShot ?? false),
-            // effectMode가 미설정(undefined)이면 원래 panRatio 기반 동작.
-            // 명시 'pan' 설정한 경우만 풀 패닝.
-            effectModes: photosForRender.map((p) => p.effectMode),
             frameStyle,
             panRatio,
             resolution,
             phrases,
-            hookText,
+            hookText: script.hook,
             hookStart,
             hookEnd,
-            ctaText,
+            ctaText: script.cta,
             ctaStart,
             ctaEnd,
-            audio: audioBlob,
-            audioDurationSec: audioDurSec,
+            audio: voice.audioBlob,
+            audioDurationSec: voice.totalDur,
             bgm: bgmFile,
             bgmVolume,
           },
@@ -1638,51 +1529,6 @@ export default function VideoMakerPage() {
             />
           </div>
         </div>
-        {businessType !== 'mart' ? (
-        <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-3">
-          <div className="text-xs font-medium text-gray-600">
-            영상 구성 옵션
-          </div>
-          <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:gap-6">
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={useScript}
-                onChange={(e) => {
-                  const v = e.target.checked;
-                  setUseScript(v);
-                  if (!v) setUseVoice(false);
-                }}
-                className="h-4 w-4"
-              />
-              <span>자동 스크립트 사용 (Hook · 코너 · CTA 자막)</span>
-            </label>
-            <label
-              className={`flex items-center gap-2 text-sm ${!useScript ? 'text-gray-400' : ''}`}
-              title={
-                !useScript
-                  ? '스크립트가 꺼져 있어 음성도 사용할 수 없습니다'
-                  : undefined
-              }
-            >
-              <input
-                type="checkbox"
-                checked={useVoice}
-                disabled={!useScript}
-                onChange={(e) => setUseVoice(e.target.checked)}
-                className="h-4 w-4"
-              />
-              <span>음성 합성 사용 (나레이션)</span>
-            </label>
-          </div>
-          {!useScript && !useVoice ? (
-            <p className="mt-2 text-xs text-gray-500">
-              사진만으로 영상을 만듭니다. 배경음악은 선택 가능.
-            </p>
-          ) : null}
-        </div>
-        ) : null}
-
         <PhotoUploader
           photos={photos}
           onAdd={onAdd}
@@ -1691,16 +1537,10 @@ export default function VideoMakerPage() {
           onReorder={onReorder}
           onGenerateDrone={onGenerateDrone}
           onCancelDrone={onCancelDrone}
-          showFixedDurationButton={businessType === 'photo_studio'}
-          fixedDurationSec={4}
-          hideDroneButton={businessType === 'photo_studio'}
-          hideCornerInputs={businessType === 'photo_studio'}
-          showEffectButtons={businessType === 'photo_studio'}
         />
       </section>
 
       {/* Step 2: 스크립트 (구조화 편집) */}
-      {useScript ? (
       <section className="card mb-6">
         <div className="mb-3 flex items-center justify-between">
           <div>
@@ -1777,10 +1617,8 @@ export default function VideoMakerPage() {
           </div>
         )}
       </section>
-      ) : null}
 
       {/* Step 3: 음성 */}
-      {useVoice ? (
       <section className="card mb-6">
         <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
           <div>
@@ -1896,7 +1734,6 @@ export default function VideoMakerPage() {
           </div>
         ) : null}
       </section>
-      ) : null}
 
       {/* Step 3-2: BGM */}
       <section className="card mb-6">
@@ -2088,12 +1925,7 @@ export default function VideoMakerPage() {
           <button
             type="button"
             className="btn-primary"
-            disabled={
-              rendering ||
-              photos.length === 0 ||
-              (useScript && !script) ||
-              (useVoice && !voice)
-            }
+            disabled={!voice || rendering || photos.length === 0}
             onClick={handleRender}
           >
             {rendering ? '렌더링 중…' : videoBlob ? '다시 렌더링' : '렌더링 시작'}
