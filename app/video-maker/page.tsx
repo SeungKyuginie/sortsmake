@@ -954,14 +954,25 @@ export default function VideoMakerPage() {
   };
 
   const handleDownload = () => {
-    if (!videoBlob || !videoUrl) return;
-    const a = document.createElement('a');
-    a.href = videoUrl;
+    if (!videoBlob) return;
     const safeStore = (storeName || 'mart').replace(/[^\w가-힣-]/g, '_');
-    a.download = `${safeStore}_shorts_${Date.now()}.mp4`;
+    const filename = `${safeStore}_shorts_${Date.now()}.mp4`;
+    // type이 누락된 blob은 다운로드가 막힐 수 있으므로 video/mp4로 재포장
+    const dlBlob =
+      videoBlob.type === 'video/mp4'
+        ? videoBlob
+        : new Blob([videoBlob], { type: 'video/mp4' });
+    const url = URL.createObjectURL(dlBlob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.rel = 'noopener';
     document.body.appendChild(a);
     a.click();
-    a.remove();
+    setTimeout(() => {
+      a.remove();
+      URL.revokeObjectURL(url);
+    }, 1500);
   };
 
   // 스크립트 수정
