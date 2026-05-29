@@ -21,6 +21,7 @@ import {
 } from '../video-maker/cloud-sync-client';
 import { clearAll, loadItem, saveItem } from '../video-maker/storage';
 import { renderVideo } from '../video-maker/renderVideo';
+import { renderOnCloud } from '../video-maker/renderCloud';
 import { makeSilentWavBlob } from '../video-maker/silentAudio';
 import { probeMediaSize, uid } from '../video-maker/mediaUtils';
 import type { CornerPhoto } from '../video-maker/types';
@@ -32,7 +33,8 @@ export default function PhotoMakerPage() {
   const [storeNameLocked, setStoreNameLocked] = useState(false);
   const [duration, setDuration] = useState(30);
   const [frameStyle] = useState<'cover' | 'blur'>('cover');
-  const [resolution] = useState<'1080p' | '720p'>('720p');
+  const [resolution, setResolution] = useState<'1080p' | '720p'>('720p');
+  const [renderMode, setRenderMode] = useState<'browser' | 'server'>('server');
 
   const [photos, setPhotos] = useState<CornerPhoto[]>([]);
   const [bgmFile, setBgmFile] = useState<File | null>(null);
@@ -66,15 +68,19 @@ export default function PhotoMakerPage() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [sStoreName, sDuration, sPhotos, sBgmFile, sBgmVolume, sVideoBlob] =
-        await Promise.all([
-          loadItem<string>('ps_storeName'),
-          loadItem<number>('ps_duration'),
-          loadItem<SerializedPhoto[]>('ps_photos'),
-          loadItem<File>('ps_bgmFile'),
-          loadItem<number>('ps_bgmVolume'),
-          loadItem<Blob>('ps_videoBlob'),
-        ]);
+      const [
+        sStoreName, sDuration, sPhotos, sBgmFile, sBgmVolume, sVideoBlob,
+        sRenderMode, sResolution,
+      ] = await Promise.all([
+        loadItem<string>('ps_storeName'),
+        loadItem<number>('ps_duration'),
+        loadItem<SerializedPhoto[]>('ps_photos'),
+        loadItem<File>('ps_bgmFile'),
+        loadItem<number>('ps_bgmVolume'),
+        loadItem<Blob>('ps_videoBlob'),
+        loadItem<'browser' | 'server'>('ps_renderMode'),
+        loadItem<'720p' | '1080p'>('ps_resolution'),
+      ]);
       if (cancelled) return;
       if (sStoreName) setStoreName(sStoreName);
       if (typeof sDuration === 'number') setDuration(sDuration);
@@ -90,6 +96,10 @@ export default function PhotoMakerPage() {
       if (sBgmFile) setBgmFile(sBgmFile);
       if (typeof sBgmVolume === 'number') setBgmVolume(sBgmVolume);
       if (sVideoBlob) setVideoBlob(sVideoBlob);
+      if (sRenderMode === 'browser' || sRenderMode === 'server')
+        setRenderMode(sRenderMode);
+      if (sResolution === '720p' || sResolution === '1080p')
+        setResolution(sResolution);
       setHydrated(true);
     })();
     return () => {
@@ -142,6 +152,12 @@ export default function PhotoMakerPage() {
   useEffect(() => {
     if (hydrated) saveItem('ps_videoBlob', videoBlob);
   }, [hydrated, videoBlob]);
+  useEffect(() => {
+    if (hydrated) saveItem('ps_renderMode', renderMode);
+  }, [hydrated, renderMode]);
+  useEffect(() => {
+    if (hydrated) saveItem('ps_resolution', resolution);
+  }, [hydrated, resolution]);
 
   // 4) 클라우드 동기화 — 로드
   useEffect(() => {
@@ -158,6 +174,10 @@ export default function PhotoMakerPage() {
           setStoreName(state.storeNameOverride);
         if (typeof state.duration === 'number') setDuration(state.duration);
         if (typeof state.bgmVolume === 'number') setBgmVolume(state.bgmVolume);
+        if (state.renderMode === 'browser' || state.renderMode === 'server')
+          setRenderMode(state.renderMode);
+        if (state.resolution === '720p' || state.resolution === '1080p')
+          setResolution(state.resolution);
 
         if (Array.isArray(state.photos) && state.photos.length > 0) {
           const restored = await Promise.all(
@@ -229,6 +249,8 @@ export default function PhotoMakerPage() {
       storeNameOverride: storeNameLocked ? undefined : storeName,
       duration,
       bgmVolume,
+      renderMode,
+      resolution,
       photos: cloudPhotos,
     };
     latestCloudPayloadRef.current = payload;
@@ -236,7 +258,7 @@ export default function PhotoMakerPage() {
       saveCloudState(payload).catch(() => {});
     }, 500);
     return () => clearTimeout(t);
-  }, [cloudHydrated, storeName, storeNameLocked, duration, bgmVolume, photos]);
+  }, [cloudHydrated, storeName, storeNameLocked, duration, bgmVolume, renderMode, resolution, photos]);
 
   // 6) 사진 업로드 (Storage)
   useEffect(() => {
@@ -410,37 +432,72 @@ export default function PhotoMakerPage() {
       const totalDur = itemDurations.reduce((a, b) => a + b, 0);
       const audioBlob = makeSilentWavBlob(Math.max(0.5, totalDur));
 
-      const blob = await renderVideo(
-        {
-          items: photosForRender.map((p) => ({
-            file: p.file,
-            kind: p.kind,
-            width: p.width,
-            height: p.height,
-          })),
-          itemDurations,
-          droneShots: photosForRender.map(() => false),
-          effectModes: photosForRender.map((p) => p.effectMode),
-          frameStyle,
-          panRatio: 1.0,
-          resolution,
-          phrases: [],
-          hookText: '',
-          hookStart: 0,
-          hookEnd: 0,
-          ctaText: '',
-          ctaStart: totalDur,
-          ctaEnd: totalDur,
-          audio: audioBlob,
-          audioDurationSec: totalDur,
-          bgm: bgmFile,
-          bgmVolume,
-        },
-        ({ ratio, message }) => {
-          setRenderRatio(ratio);
-          setRenderMessage(message);
-        },
-      );
+      let blob: Blob;
+      if (renderMode === 'server') {
+        blob = await renderOnCloud(
+          {
+            items: photosForRender.map((p) => ({
+              file: p.file,
+              kind: p.kind,
+              width: p.width,
+              height: p.height,
+              droneShot: false,
+              effectMode: p.effectMode,
+            })),
+            itemDurations,
+            frameStyle,
+            panRatio: 1.0,
+            resolution,
+            audio: audioBlob,
+            audioDurationSec: totalDur,
+            bgm: bgmFile,
+            bgmVolume,
+            hookText: '',
+            hookStart: 0,
+            hookEnd: 0,
+            ctaText: '',
+            ctaStart: totalDur,
+            ctaEnd: totalDur,
+            phrases: [],
+          },
+          ({ ratio, message }) => {
+            setRenderRatio(ratio);
+            setRenderMessage(message);
+          },
+        );
+      } else {
+        blob = await renderVideo(
+          {
+            items: photosForRender.map((p) => ({
+              file: p.file,
+              kind: p.kind,
+              width: p.width,
+              height: p.height,
+            })),
+            itemDurations,
+            droneShots: photosForRender.map(() => false),
+            effectModes: photosForRender.map((p) => p.effectMode),
+            frameStyle,
+            panRatio: 1.0,
+            resolution,
+            phrases: [],
+            hookText: '',
+            hookStart: 0,
+            hookEnd: 0,
+            ctaText: '',
+            ctaStart: totalDur,
+            ctaEnd: totalDur,
+            audio: audioBlob,
+            audioDurationSec: totalDur,
+            bgm: bgmFile,
+            bgmVolume,
+          },
+          ({ ratio, message }) => {
+            setRenderRatio(ratio);
+            setRenderMessage(message);
+          },
+        );
+      }
       setVideoBlob(blob);
     } catch (e) {
       setError(e instanceof Error ? e.message : '렌더링 실패');
@@ -552,6 +609,32 @@ export default function PhotoMakerPage() {
                   {d}초
                 </option>
               ))}
+            </select>
+          </div>
+          <div>
+            <label className="label">렌더링 모드</label>
+            <select
+              className="input"
+              value={renderMode}
+              onChange={(e) =>
+                setRenderMode(e.target.value as 'browser' | 'server')
+              }
+            >
+              <option value="server">서버 (폰에서도 빠름 · 권장)</option>
+              <option value="browser">브라우저 (인터넷 없이도 가능, 느림)</option>
+            </select>
+          </div>
+          <div>
+            <label className="label">출력 해상도</label>
+            <select
+              className="input"
+              value={resolution}
+              onChange={(e) =>
+                setResolution(e.target.value as '720p' | '1080p')
+              }
+            >
+              <option value="720p">720p (빠름, 권장)</option>
+              <option value="1080p">1080p (고화질)</option>
             </select>
           </div>
         </div>
