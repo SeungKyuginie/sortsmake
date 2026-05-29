@@ -510,6 +510,15 @@ app.post('/render', async (req, res) => {
       );
     }
 
+    // 워터마크 (좌하단 매장명) — 영상 전체 노출
+    if (b.watermarkText && typeof b.watermarkText === 'string' && b.watermarkText.trim()) {
+      const wmText = esc(b.watermarkText.trim());
+      const wmFont = fontFile ? `fontfile=${fontFile}:` : '';
+      drawNodes.push(
+        `drawtext=text='${wmText}':${wmFont}fontcolor=white@0.92:fontsize=40:shadowcolor=black@0.8:shadowx=2:shadowy=2:borderw=3:bordercolor=black@0.6:x=60:y=${HEIGHT - 90}`,
+      );
+    }
+
     const textChain =
       drawNodes.length > 0
         ? `[concat0]${drawNodes.join(',')}[vout]`

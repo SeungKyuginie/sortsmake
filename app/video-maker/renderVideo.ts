@@ -67,6 +67,7 @@ export type RenderInput = {
   ctaEnd: number;
   audio: Blob;
   audioDurationSec: number;
+  watermarkText?: string; // 영상 전체에 좌하단 노출 (브랜드/매장명)
   bgm?: Blob | null;
   bgmVolume?: number; // 0..1, default 0.16
   voiceVolume?: number; // default 1.0
@@ -401,6 +402,7 @@ export async function renderVideo(
     ctaEnd,
     audio,
     audioDurationSec,
+    watermarkText,
     bgm,
     bgmVolume = 0.16,
     voiceVolume = 1.0,
@@ -555,6 +557,15 @@ export async function renderVideo(
         box: true,
         borderw: 9,
       }),
+    );
+  }
+
+  // 워터마크 (좌하단 매장명) — 영상 전체 노출
+  if (watermarkText && watermarkText.trim()) {
+    const wmText = esc(watermarkText.trim());
+    const wmFont = fontFile ? `fontfile=${fontFile}:` : '';
+    drawNodes.push(
+      `drawtext=text='${wmText}':${wmFont}fontcolor=white@0.92:fontsize=40:shadowcolor=black@0.8:shadowx=2:shadowy=2:borderw=3:bordercolor=black@0.6:x=60:y=${HEIGHT - 90}`,
     );
   }
 

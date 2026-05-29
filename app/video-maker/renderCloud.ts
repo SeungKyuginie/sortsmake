@@ -36,6 +36,7 @@ export type CloudRenderInput = {
   ctaStart?: number;
   ctaEnd?: number;
   phrases?: CloudRenderPhrase[];
+  watermarkText?: string;
 };
 
 export type CloudRenderProgress = {
@@ -166,6 +167,7 @@ export async function renderOnCloud(
       ctaStart: input.ctaStart ?? 0,
       ctaEnd: input.ctaEnd ?? 0,
       phrases: input.phrases ?? [],
+      watermarkText: input.watermarkText ?? '',
       bgmVolume: input.bgmVolume ?? 0.16,
       audioDurationSec: input.audioDurationSec,
       outputKey: urlData.outputKey,

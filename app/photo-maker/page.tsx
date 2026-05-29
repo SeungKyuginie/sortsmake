@@ -452,6 +452,7 @@ export default function PhotoMakerPage() {
             audioDurationSec: totalDur,
             bgm: bgmFile,
             bgmVolume,
+            watermarkText: storeName,
             hookText: '',
             hookStart: 0,
             hookEnd: 0,
@@ -491,6 +492,7 @@ export default function PhotoMakerPage() {
             audioDurationSec: totalDur,
             bgm: bgmFile,
             bgmVolume,
+            watermarkText: storeName,
           },
           ({ ratio, message }) => {
             setRenderRatio(ratio);
