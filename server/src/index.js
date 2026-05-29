@@ -292,7 +292,9 @@ function buildItemChain(idx, T, opts) {
 
   // cover (기본)
   const dir = idx % 2 === 0 ? 1 : -1;
-  const halfAmp = (panRatio / 2).toFixed(4);
+  // 'pan' 효과가 명시되면 끝~끝(0.5) 풀 패닝, 아니면 panRatio
+  const effectivePan = effectMode === 'pan' ? 1.0 : panRatio;
+  const halfAmp = (effectivePan / 2).toFixed(4);
   const xExpr = `(in_w-${WIDTH})*0.5 + (in_w-${WIDTH})*${halfAmp}*${dir}*(2*t/${Tstr}-1)`;
   const yExpr = `(in_h-${HEIGHT})/2`;
   const aspectThreshold = (WIDTH / HEIGHT).toFixed(6);

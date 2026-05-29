@@ -341,9 +341,10 @@ function buildItemChain(
   }
 
   // 'cover' 모드 (기본): 가로 사진을 화면에 꽉 채우고 좌우 panRatio 만큼 패닝.
-  // amplitude = panRatio / 2 (총 panRatio 폭, 중앙 기준 ±)
+  // 단, 사진별로 'pan'을 명시 선택한 경우(사진관)는 끝~끝(0.5) 풀 패닝.
   const dir = idx % 2 === 0 ? 1 : -1;
-  const halfAmp = (panRatio / 2).toFixed(4);
+  const effectivePan = effectMode === 'pan' ? 1.0 : panRatio;
+  const halfAmp = (effectivePan / 2).toFixed(4);
   const xExpr = `(in_w-${WIDTH})*0.5 + (in_w-${WIDTH})*${halfAmp}*${dir}*(2*t/${Tstr}-1)`;
   const yExpr = `(in_h-${HEIGHT})/2`;
   // aspect threshold = WIDTH/HEIGHT = 0.5625 (9:16)
