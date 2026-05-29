@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isAdminEmail } from '@/lib/auth/admin';
+import { isValidUsername, usernameToEmail } from '@/lib/auth/id';
 
 async function requireAdmin() {
   const supabase = createClient();
@@ -16,7 +17,7 @@ async function requireAdmin() {
 }
 
 export async function createUserAction(input: {
-  email: string;
+  username: string;
   password: string;
 }): Promise<{ error?: string }> {
   try {
@@ -24,16 +25,17 @@ export async function createUserAction(input: {
   } catch (e) {
     return { error: e instanceof Error ? e.message : String(e) };
   }
-  if (!input.email || !input.password) {
-    return { error: '이메일과 비밀번호를 입력하세요.' };
+  const username = input.username.trim().toLowerCase();
+  if (!isValidUsername(username)) {
+    return { error: '아이디는 영문/숫자/._-, 3~32자만 가능합니다.' };
   }
-  if (input.password.length < 6) {
+  if (!input.password || input.password.length < 6) {
     return { error: '비밀번호는 6자 이상이어야 합니다.' };
   }
   try {
     const admin = createAdminClient();
     const { error } = await admin.auth.admin.createUser({
-      email: input.email,
+      email: usernameToEmail(username),
       password: input.password,
       email_confirm: true,
     });

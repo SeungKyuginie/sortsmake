@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isAdminEmail } from '@/lib/auth/admin';
+import { emailToUsername } from '@/lib/auth/id';
 import { UserManager } from './UserManager';
 import { AdminLogoutButton } from './AdminLogoutButton';
 
@@ -25,7 +26,7 @@ export default async function AdminPage() {
     redirect('/video-maker');
   }
 
-  let userList: Array<{ id: string; email: string; createdAt: string }> = [];
+  let userList: Array<{ id: string; username: string; createdAt: string }> = [];
   let listError: string | null = null;
   try {
     const admin = createAdminClient();
@@ -33,12 +34,14 @@ export default async function AdminPage() {
     if (error) throw error;
     userList = data.users.map((u) => ({
       id: u.id,
-      email: u.email ?? '(이메일 없음)',
+      username: emailToUsername(u.email) || '(이름 없음)',
       createdAt: u.created_at,
     }));
   } catch (e) {
     listError = e instanceof Error ? e.message : String(e);
   }
+
+  const adminUsername = emailToUsername(user.email);
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-8">
@@ -46,7 +49,7 @@ export default async function AdminPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">사용자 관리</h1>
           <p className="mt-1 text-sm text-gray-600">
-            관리자({user.email})만 접근할 수 있는 페이지입니다.
+            관리자({adminUsername})만 접근할 수 있는 페이지입니다.
           </p>
         </div>
         <div className="flex shrink-0 gap-2">
@@ -63,7 +66,7 @@ export default async function AdminPage() {
         </div>
       ) : null}
 
-      <UserManager users={userList} adminEmail={user.email ?? ''} />
+      <UserManager users={userList} adminUsername={adminUsername} />
     </main>
   );
 }

@@ -10,16 +10,16 @@ import {
 
 type User = {
   id: string;
-  email: string;
+  username: string;
   createdAt: string;
 };
 
 type Props = {
   users: User[];
-  adminEmail: string;
+  adminUsername: string;
 };
 
-export function UserManager({ users, adminEmail }: Props) {
+export function UserManager({ users, adminUsername }: Props) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
@@ -33,35 +33,38 @@ export function UserManager({ users, adminEmail }: Props) {
       <section className="card">
         <h2 className="text-lg font-semibold">새 사용자 추가</h2>
         <p className="mt-1 text-xs text-gray-500">
-          이메일과 비밀번호를 입력해 직접 발급하세요. 이메일 확인 절차 없이 즉시
-          사용 가능합니다.
+          아이디와 비밀번호를 직접 입력해 발급하세요. 아이디는 영문/숫자/._-,
+          3~32자.
         </p>
         <form
           className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1fr_auto]"
           onSubmit={(e) => {
             e.preventDefault();
             const fd = new FormData(e.currentTarget);
-            const email = String(fd.get('email') ?? '');
+            const username = String(fd.get('username') ?? '');
             const password = String(fd.get('password') ?? '');
             setError(null);
             setInfo(null);
             startTransition(async () => {
-              const res = await createUserAction({ email, password });
+              const res = await createUserAction({ username, password });
               if (res?.error) {
                 setError(res.error);
                 return;
               }
-              setInfo(`${email} 사용자가 추가됐습니다.`);
+              setInfo(`${username} 사용자가 추가됐습니다.`);
               (e.target as HTMLFormElement).reset();
               refresh();
             });
           }}
         >
           <input
-            name="email"
-            type="email"
+            name="username"
+            type="text"
             required
-            placeholder="[email protected]"
+            minLength={3}
+            maxLength={32}
+            pattern="[a-zA-Z0-9._\-]{3,32}"
+            placeholder="아이디"
             autoComplete="off"
             className="input"
           />
@@ -94,10 +97,12 @@ export function UserManager({ users, adminEmail }: Props) {
         <h2 className="text-lg font-semibold">사용자 목록 ({users.length})</h2>
         <div className="mt-3 divide-y divide-gray-100 border-t border-gray-100">
           {users.length === 0 ? (
-            <p className="py-4 text-sm text-gray-500">등록된 사용자가 없습니다.</p>
+            <p className="py-4 text-sm text-gray-500">
+              등록된 사용자가 없습니다.
+            </p>
           ) : (
             users.map((u) => {
-              const isSelf = u.email === adminEmail;
+              const isSelf = u.username === adminUsername;
               return (
                 <div
                   key={u.id}
@@ -105,7 +110,7 @@ export function UserManager({ users, adminEmail }: Props) {
                 >
                   <div className="min-w-0">
                     <div className="truncate text-sm font-medium text-gray-900">
-                      {u.email}
+                      {u.username}
                       {isSelf ? (
                         <span className="ml-2 rounded bg-brand-100 px-2 py-0.5 text-xs text-brand-700">
                           나(관리자)
@@ -131,7 +136,8 @@ export function UserManager({ users, adminEmail }: Props) {
                       className="btn-secondary text-xs text-red-600 disabled:text-gray-400"
                       title={isSelf ? '본인 계정은 삭제할 수 없습니다' : '삭제'}
                       onClick={() => {
-                        if (!confirm(`${u.email} 사용자를 삭제할까요?`)) return;
+                        if (!confirm(`${u.username} 사용자를 삭제할까요?`))
+                          return;
                         setError(null);
                         setInfo(null);
                         startTransition(async () => {
@@ -140,7 +146,7 @@ export function UserManager({ users, adminEmail }: Props) {
                             setError(res.error);
                             return;
                           }
-                          setInfo(`${u.email} 사용자를 삭제했습니다.`);
+                          setInfo(`${u.username} 사용자를 삭제했습니다.`);
                           refresh();
                         });
                       }}
@@ -178,14 +184,14 @@ export function UserManager({ users, adminEmail }: Props) {
                   setError(res.error);
                   return;
                 }
-                setInfo(`${resetTarget.email} 비밀번호가 변경됐습니다.`);
+                setInfo(`${resetTarget.username} 비밀번호가 변경됐습니다.`);
                 setResetTarget(null);
                 refresh();
               });
             }}
           >
             <h3 className="text-base font-semibold">
-              비밀번호 재설정 — {resetTarget.email}
+              비밀번호 재설정 — {resetTarget.username}
             </h3>
             <input
               name="newPassword"

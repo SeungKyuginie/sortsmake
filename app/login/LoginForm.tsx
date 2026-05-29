@@ -23,7 +23,7 @@ export function LoginForm({ redirectTo, initialError }: Props) {
         setError(null);
         startTransition(async () => {
           const res = await signInAction({
-            email: String(form.get('email') ?? ''),
+            username: String(form.get('username') ?? ''),
             password: String(form.get('password') ?? ''),
             redirectTo,
           });
@@ -37,17 +37,23 @@ export function LoginForm({ redirectTo, initialError }: Props) {
       }}
     >
       <div>
-        <label className="text-xs font-medium text-gray-600" htmlFor="email">
-          아이디 (이메일)
+        <label
+          className="text-xs font-medium text-gray-600"
+          htmlFor="username"
+        >
+          아이디
         </label>
         <input
-          id="email"
-          name="email"
-          type="email"
+          id="username"
+          name="username"
+          type="text"
           autoComplete="username"
           required
+          minLength={3}
+          maxLength={32}
+          pattern="[a-zA-Z0-9._\-]{3,32}"
           className="input mt-1"
-          placeholder="[email protected]"
+          placeholder="예: ginie"
         />
       </div>
       <div>
