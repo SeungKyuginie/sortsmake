@@ -22,11 +22,11 @@ const HOOK_Y = Math.round(HEIGHT * 0.18);
 const CTA_Y = Math.round(HEIGHT * 0.18);
 
 // 한국 숏츠 자막 트렌드: 굵고 큼. 검은고딕/도현/어그로체 수준 임팩트.
-const FONT_BASE = 84;
-const FONT_HIGHLIGHT = 112;
-const FONT_HOOK = 108;
-const FONT_HOOK_SLAM = 136; // 첫 0~0.35초 text slam (pattern interrupt)
-const FONT_CTA = 112;
+const FONT_BASE = 80;
+const FONT_HIGHLIGHT = 106;
+const FONT_HOOK = 103;
+const FONT_HOOK_SLAM = 129; // 첫 0~0.35초 text slam (pattern interrupt)
+const FONT_CTA = 106;
 
 // 첫 0~0.8초가 50~60% drop-off 구간 (Opus.pro). 그 안에 text slam.
 const HOOK_SLAM_DURATION = 0.35;

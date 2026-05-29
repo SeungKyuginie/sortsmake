@@ -27,10 +27,10 @@ const FPS = 30;
 const PHRASE_Y = Math.round(HEIGHT * 0.72);
 const HOOK_Y = Math.round(HEIGHT * 0.18);
 const CTA_Y = Math.round(HEIGHT * 0.18);
-const FONT_BASE = 84;
-const FONT_HOOK = 108;
-const FONT_HOOK_SLAM = 136;
-const FONT_CTA = 112;
+const FONT_BASE = 80;
+const FONT_HOOK = 103;
+const FONT_HOOK_SLAM = 129;
+const FONT_CTA = 106;
 const HOOK_SLAM_DURATION = 0.35;
 
 const FONT_URL =
