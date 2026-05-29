@@ -2,7 +2,10 @@
 
 import { createClient } from '@/lib/supabase/server';
 
-export async function getMyStoreName(): Promise<{ storeName: string }> {
+export async function getMyStoreName(): Promise<{
+  storeName: string;
+  businessType: string;
+}> {
   const supabase = createClient();
   const {
     data: { user },
@@ -11,5 +14,9 @@ export async function getMyStoreName(): Promise<{ storeName: string }> {
     user?.user_metadata && typeof user.user_metadata.storeName === 'string'
       ? user.user_metadata.storeName
       : '';
-  return { storeName };
+  const businessType =
+    user?.user_metadata && typeof user.user_metadata.businessType === 'string'
+      ? user.user_metadata.businessType
+      : '';
+  return { storeName, businessType };
 }
