@@ -18,6 +18,8 @@ type Props = {
   hideDroneButton?: boolean;
   // 코너명·힌트 입력 숨김 (스크립트 미사용 업종)
   hideCornerInputs?: boolean;
+  // 효과 모드 버튼 (↔/🔍+/🔍-) 노출 (사진관 등에서만)
+  showEffectButtons?: boolean;
 };
 
 export function PhotoUploader({
@@ -32,6 +34,7 @@ export function PhotoUploader({
   fixedDurationSec = 4,
   hideDroneButton = false,
   hideCornerInputs = false,
+  showEffectButtons = false,
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -148,7 +151,7 @@ export function PhotoUploader({
                           ⏱{fixedDurationSec}s
                         </button>
                       )}
-                      {p.kind === 'image' && !p.droneShot && (
+                      {showEffectButtons && p.kind === 'image' && !p.droneShot && (
                         <div
                           className="inline-flex overflow-hidden rounded border border-gray-300"
                           title="이 사진의 모션 효과 선택"

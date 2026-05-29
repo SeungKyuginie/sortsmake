@@ -154,7 +154,7 @@ export async function renderOnCloud(
       bgmUrl: urlData.bgmUpload?.gcsPath ?? null,
       itemDurations,
       droneShots: items.map((it) => !!it.droneShot),
-      effectModes: items.map((it) => it.effectMode ?? 'pan'),
+      effectModes: items.map((it) => it.effectMode ?? null),
       photoKinds: items.map((it) => it.kind),
       frameStyle: input.frameStyle ?? 'cover',
       panRatio: input.panRatio ?? 0.6,

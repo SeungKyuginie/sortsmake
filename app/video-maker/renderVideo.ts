@@ -50,7 +50,7 @@ export type RenderInput = {
   items: RenderItem[];
   itemDurations: number[]; // sum === audioDurationSec
   droneShots?: boolean[]; // per-item drone shot flag (images only)
-  effectModes?: ('pan' | 'zoom_in' | 'zoom_out')[]; // per-item motion effect (default 'pan')
+  effectModes?: (('pan' | 'zoom_in' | 'zoom_out') | undefined)[]; // per-item motion effect (undefined = default panRatio)
   // 'cover': 사진을 화면에 꽉 채움 (현재 동작, 가로 사진 좌우 패닝)
   // 'blur': 사진을 살짝만 확대 + 위아래 블러 + 전체 가로 풀 패닝
   frameStyle?: 'cover' | 'blur';
@@ -226,7 +226,7 @@ function buildItemChain(
   srcWidth?: number,
   srcHeight?: number,
   panRatio = 0.6,
-  effectMode: 'pan' | 'zoom_in' | 'zoom_out' = 'pan',
+  effectMode: 'pan' | 'zoom_in' | 'zoom_out' | undefined = undefined,
 ): string {
   const Tstr = T.toFixed(3);
 
@@ -341,7 +341,8 @@ function buildItemChain(
   }
 
   // 'cover' 모드 (기본): 가로 사진을 화면에 꽉 채우고 좌우 panRatio 만큼 패닝.
-  // 단, 사진별로 'pan'을 명시 선택한 경우(사진관)는 끝~끝(0.5) 풀 패닝.
+  // effectMode === 'pan'으로 명시된 경우(사진관)는 끝~끝(0.5) 풀 패닝.
+  // undefined면 기존 panRatio 동작 유지 (마트 영향 없음).
   const dir = idx % 2 === 0 ? 1 : -1;
   const effectivePan = effectMode === 'pan' ? 1.0 : panRatio;
   const halfAmp = (effectivePan / 2).toFixed(4);

@@ -203,7 +203,7 @@ function drawWrappedTextNodes(text, baseOpts) {
 // ───────────────────────── 필터 그래프 ─────────────────────────
 
 function buildItemChain(idx, T, opts) {
-  const { droneShot = false, frameStyle = 'cover', panRatio = 0.6, srcWidth, srcHeight, effectMode = 'pan', isVideo = false } = opts;
+  const { droneShot = false, frameStyle = 'cover', panRatio = 0.6, srcWidth, srcHeight, effectMode = undefined, isVideo = false } = opts;
   const Tstr = T.toFixed(3);
 
   if (droneShot) {
@@ -416,7 +416,7 @@ app.post('/render', async (req, res) => {
         panRatio,
         srcWidth: Array.isArray(b.photoWidths) ? b.photoWidths[i] : undefined,
         srcHeight: Array.isArray(b.photoHeights) ? b.photoHeights[i] : undefined,
-        effectMode: Array.isArray(b.effectModes) ? b.effectModes[i] : 'pan',
+        effectMode: Array.isArray(b.effectModes) ? (b.effectModes[i] ?? undefined) : undefined,
         isVideo: Array.isArray(b.photoKinds) ? b.photoKinds[i] === 'video' : false,
       }),
     );

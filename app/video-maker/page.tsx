@@ -1352,7 +1352,9 @@ export default function VideoMakerPage() {
             })),
             itemDurations,
             droneShots: photosForRender.map((p) => p.droneShot ?? false),
-            effectModes: photosForRender.map((p) => p.effectMode ?? 'pan'),
+            // effectMode가 미설정(undefined)이면 원래 panRatio 기반 동작.
+            // 명시 'pan' 설정한 경우만 풀 패닝.
+            effectModes: photosForRender.map((p) => p.effectMode),
             frameStyle,
             panRatio,
             resolution,
@@ -1693,6 +1695,7 @@ export default function VideoMakerPage() {
           fixedDurationSec={4}
           hideDroneButton={businessType === 'photo_studio'}
           hideCornerInputs={businessType === 'photo_studio'}
+          showEffectButtons={businessType === 'photo_studio'}
         />
       </section>
 
