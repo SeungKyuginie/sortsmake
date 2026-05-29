@@ -613,6 +613,33 @@ export default function VideoMakerPage() {
     };
   }, []);
 
+  // 임시저장 버튼 상태
+  const [manualSaving, setManualSaving] = useState(false);
+  const [manualSavedAt, setManualSavedAt] = useState<number | null>(null);
+  const photosUploadingCount = photos.filter(
+    (p) => p.uploadStatus === 'uploading',
+  ).length;
+  const handleManualSave = async () => {
+    if (manualSaving) return;
+    setManualSaving(true);
+    try {
+      if (latestCloudPayloadRef.current) {
+        const res = await saveCloudState(latestCloudPayloadRef.current);
+        if (!res?.error) {
+          setManualSavedAt(Date.now());
+        }
+      }
+    } finally {
+      setManualSaving(false);
+    }
+  };
+  // "저장됨" 표시를 3초 뒤 자동 해제
+  useEffect(() => {
+    if (!manualSavedAt) return;
+    const t = setTimeout(() => setManualSavedAt(null), 3000);
+    return () => clearTimeout(t);
+  }, [manualSavedAt]);
+
   // 상태 변화 시 자동 저장 (하이드레이션 이후만)
   useEffect(() => { if (hydrated) saveItem('storeName', storeName); }, [hydrated, storeName]);
   useEffect(() => { if (hydrated) saveItem('duration', duration); }, [hydrated, duration]);
@@ -1323,16 +1350,36 @@ export default function VideoMakerPage() {
             프로그램 제작: 주식회사 인스로드
           </p>
         </div>
-        <div className="flex shrink-0 items-start gap-2">
-          <LogoutButton />
-          <button
-            type="button"
-            onClick={handleReset}
-            className="btn-secondary shrink-0 text-sm text-red-600"
-            title="모든 작업 내용 삭제"
-          >
-            🔄 초기화
-          </button>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <div className="flex items-start gap-2">
+            <button
+              type="button"
+              onClick={handleManualSave}
+              disabled={manualSaving}
+              className="btn-secondary shrink-0 text-sm"
+              title="현재 작업 내용을 즉시 클라우드에 저장 (다른 기기에서 이어서 작업 가능)"
+            >
+              {manualSaving
+                ? '저장 중…'
+                : manualSavedAt
+                  ? '✓ 저장됨'
+                  : '💾 임시저장'}
+            </button>
+            <LogoutButton />
+            <button
+              type="button"
+              onClick={handleReset}
+              className="btn-secondary shrink-0 text-sm text-red-600"
+              title="모든 작업 내용 삭제"
+            >
+              🔄 초기화
+            </button>
+          </div>
+          {photosUploadingCount > 0 ? (
+            <span className="text-xs text-amber-600">
+              ⏳ 사진 업로드 중 ({photosUploadingCount}장)
+            </span>
+          ) : null}
         </div>
       </header>
 
