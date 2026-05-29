@@ -105,10 +105,10 @@ export function PhotoUploader({
                           type="button"
                           title="AI로 항공샷 이미지 생성 후 줌아웃 효과까지 적용"
                           disabled={p.droneAiStatus === 'generating'}
-                          className={`px-2 py-1 text-xs rounded border font-medium transition-colors ${
+                          className={`whitespace-nowrap px-2 py-1 text-xs rounded border font-medium transition ${
                             p.droneAiStatus === 'generating'
                               ? 'bg-gray-200 text-gray-500 border-gray-300 cursor-wait'
-                              : 'btn-secondary'
+                              : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100'
                           }`}
                           onClick={() => onGenerateDrone?.(p.id)}
                         >
@@ -135,10 +135,10 @@ export function PhotoUploader({
                               ? `${p.fixedDurationSec}초 고정 적용됨 (클릭 시 해제)`
                               : `${fixedDurationSec}초 고정으로 표시`
                           }
-                          className={`whitespace-nowrap px-2 py-1 text-xs rounded border font-medium ${
+                          className={`whitespace-nowrap px-2 py-1 text-xs rounded border font-medium transition ${
                             p.fixedDurationSec
                               ? 'bg-amber-500 text-white border-amber-500'
-                              : 'btn-secondary'
+                              : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100'
                           }`}
                           onClick={() =>
                             onUpdate(p.id, {
@@ -187,7 +187,7 @@ export function PhotoUploader({
                       )}
                       <button
                         type="button"
-                        className="btn-secondary px-2 py-1 text-xs"
+                        className="whitespace-nowrap rounded border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-gray-700 transition hover:bg-gray-100 disabled:opacity-50"
                         onClick={() => onReorder(p.id, -1)}
                         disabled={idx === 0}
                       >
@@ -195,7 +195,7 @@ export function PhotoUploader({
                       </button>
                       <button
                         type="button"
-                        className="btn-secondary px-2 py-1 text-xs"
+                        className="whitespace-nowrap rounded border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-gray-700 transition hover:bg-gray-100 disabled:opacity-50"
                         onClick={() => onReorder(p.id, 1)}
                         disabled={idx === photos.length - 1}
                       >
@@ -203,7 +203,7 @@ export function PhotoUploader({
                       </button>
                       <button
                         type="button"
-                        className="btn-secondary px-2 py-1 text-xs text-red-600"
+                        className="whitespace-nowrap rounded border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-red-600 transition hover:bg-gray-100 disabled:opacity-50"
                         onClick={() => onRemove(p.id)}
                       >
                         삭제
