@@ -43,6 +43,9 @@ export default async function LoginPage({ searchParams }: Props) {
           계정이 필요하면 관리자에게 문의해주세요.
         </p>
       </div>
+      <p className="mt-4 text-center text-xs text-gray-500">
+        프로그램 제작: 주식회사 인스로드
+      </p>
     </main>
   );
 }
