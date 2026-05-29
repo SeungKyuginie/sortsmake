@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import { encodeImageForClaude, encodeVideoFirstFrame } from './encodeImage';
 import { BgmLibrary } from './BgmLibrary';
 import { PhotoUploader } from './PhotoUploader';
@@ -138,6 +139,7 @@ export default function VideoMakerPage() {
   // step 1
   const [storeName, setStoreName] = useState('');
   const [storeNameLocked, setStoreNameLocked] = useState(false);
+  const [isPhotoStudio, setIsPhotoStudio] = useState(false);
   const [photos, setPhotos] = useState<CornerPhoto[]>([]);
   const [duration, setDuration] = useState(30);
   // 프레임 스타일: cover(꽉 채우기, 현재 동작) / blur(블러 액자 + 풀 가로 패닝)
@@ -359,12 +361,13 @@ export default function VideoMakerPage() {
     let cancelled = false;
     (async () => {
       try {
-        const { storeName: s } = await getMyStoreName();
+        const { storeName: s, businessType: bt } = await getMyStoreName();
         if (cancelled) return;
         if (s) {
           setStoreName(s);
           setStoreNameLocked(true);
         }
+        if (bt === 'photo_studio') setIsPhotoStudio(true);
       } catch {
         // 비로그인/오류 시 잠금 없이 사용 가능
       }
@@ -1356,6 +1359,15 @@ export default function VideoMakerPage() {
         </div>
         <div className="flex shrink-0 flex-col items-start gap-1 sm:items-end">
           <div className="flex flex-wrap items-start gap-2">
+            {isPhotoStudio ? (
+              <Link
+                href="/photo-maker"
+                className="btn-secondary shrink-0 text-xs sm:text-sm"
+                title="사진관 전용 단순 모드로 돌아가기"
+              >
+                📸 사진관 모드
+              </Link>
+            ) : null}
             <button
               type="button"
               onClick={handleManualSave}

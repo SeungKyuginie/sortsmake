@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import { BgmLibrary } from '../video-maker/BgmLibrary';
 import { PhotoUploader } from '../video-maker/PhotoUploader';
 import { LogoutButton } from '../video-maker/LogoutButton';
@@ -486,6 +487,13 @@ export default function PhotoMakerPage() {
         </div>
         <div className="flex shrink-0 flex-col items-start gap-1 sm:items-end">
           <div className="flex flex-wrap items-start gap-2">
+            <Link
+              href="/video-maker"
+              className="btn-secondary shrink-0 text-xs sm:text-sm"
+              title="자동 스크립트·음성 포함 광고용 숏츠 만들기"
+            >
+              📢 광고영상 만들기
+            </Link>
             <button
               type="button"
               onClick={handleManualSave}
