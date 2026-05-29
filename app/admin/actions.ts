@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isAdminEmail } from '@/lib/auth/admin';
 import { isValidUsername, usernameToEmail } from '@/lib/auth/id';
+import { isValidBusinessType } from '@/lib/auth/businessType';
 
 async function requireAdmin() {
   const supabase = createClient();
@@ -20,6 +21,7 @@ export async function createUserAction(input: {
   username: string;
   password: string;
   storeName: string;
+  businessType: string;
 }): Promise<{ error?: string }> {
   try {
     await requireAdmin();
@@ -28,6 +30,7 @@ export async function createUserAction(input: {
   }
   const username = input.username.trim().toLowerCase();
   const storeName = input.storeName.trim();
+  const businessType = input.businessType.trim();
   if (!isValidUsername(username)) {
     return { error: '아이디는 영문/숫자/._-, 3~32자만 가능합니다.' };
   }
@@ -40,17 +43,53 @@ export async function createUserAction(input: {
   if (storeName.length > 60) {
     return { error: '매장명은 60자 이하여야 합니다.' };
   }
+  if (!isValidBusinessType(businessType)) {
+    return { error: '업종을 선택하세요.' };
+  }
   try {
     const admin = createAdminClient();
     const { error } = await admin.auth.admin.createUser({
       email: usernameToEmail(username),
       password: input.password,
       email_confirm: true,
-      user_metadata: { storeName },
+      user_metadata: { storeName, businessType },
     });
     if (error) {
       return { error: error.message };
     }
+    revalidatePath('/admin');
+    return {};
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+export async function updateBusinessTypeAction(input: {
+  userId: string;
+  businessType: string;
+}): Promise<{ error?: string }> {
+  try {
+    await requireAdmin();
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
+  if (!isValidBusinessType(input.businessType)) {
+    return { error: '업종을 선택하세요.' };
+  }
+  try {
+    const admin = createAdminClient();
+    const { data: cur, error: getErr } = await admin.auth.admin.getUserById(
+      input.userId,
+    );
+    if (getErr) return { error: getErr.message };
+    const merged = {
+      ...(cur.user?.user_metadata ?? {}),
+      businessType: input.businessType,
+    };
+    const { error } = await admin.auth.admin.updateUserById(input.userId, {
+      user_metadata: merged,
+    });
+    if (error) return { error: error.message };
     revalidatePath('/admin');
     return {};
   } catch (e) {

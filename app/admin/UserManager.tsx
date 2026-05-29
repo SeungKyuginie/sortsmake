@@ -7,12 +7,18 @@ import {
   deleteUserAction,
   resetPasswordAction,
   updateStoreNameAction,
+  updateBusinessTypeAction,
 } from './actions';
+import {
+  BUSINESS_TYPES,
+  labelOfBusinessType,
+} from '@/lib/auth/businessType';
 
 type User = {
   id: string;
   username: string;
   storeName: string;
+  businessType: string;
   createdAt: string;
 };
 
@@ -28,6 +34,7 @@ export function UserManager({ users, adminUsername }: Props) {
   const [pending, startTransition] = useTransition();
   const [resetTarget, setResetTarget] = useState<User | null>(null);
   const [storeTarget, setStoreTarget] = useState<User | null>(null);
+  const [businessTarget, setBusinessTarget] = useState<User | null>(null);
 
   const refresh = () => router.refresh();
 
@@ -36,7 +43,7 @@ export function UserManager({ users, adminUsername }: Props) {
       <section className="card">
         <h2 className="text-lg font-semibold">새 사용자 추가</h2>
         <p className="mt-1 text-xs text-gray-500">
-          아이디는 영문/숫자/._-, 3~32자. 매장명은 영상 생성 시 자동으로 사용됩니다.
+          아이디는 영문/숫자/._-, 3~32자. 매장명·업종은 영상 생성 시 자동으로 사용됩니다.
         </p>
         <form
           className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2"
@@ -46,6 +53,7 @@ export function UserManager({ users, adminUsername }: Props) {
             const username = String(fd.get('username') ?? '');
             const password = String(fd.get('password') ?? '');
             const storeName = String(fd.get('storeName') ?? '');
+            const businessType = String(fd.get('businessType') ?? '');
             setError(null);
             setInfo(null);
             startTransition(async () => {
@@ -53,6 +61,7 @@ export function UserManager({ users, adminUsername }: Props) {
                 username,
                 password,
                 storeName,
+                businessType,
               });
               if (res?.error) {
                 setError(res.error);
@@ -90,8 +99,18 @@ export function UserManager({ users, adminUsername }: Props) {
             maxLength={60}
             placeholder="매장명 (예: 하나마트 강남점)"
             autoComplete="off"
-            className="input sm:col-span-2"
+            className="input"
           />
+          <select name="businessType" required defaultValue="" className="input">
+            <option value="" disabled>
+              업종 선택…
+            </option>
+            {BUSINESS_TYPES.map((t) => (
+              <option key={t.value} value={t.value}>
+                {t.label}
+              </option>
+            ))}
+          </select>
           <button
             type="submit"
             disabled={pending}
@@ -136,6 +155,11 @@ export function UserManager({ users, adminUsername }: Props) {
                           나(관리자)
                         </span>
                       ) : null}
+                      {u.businessType ? (
+                        <span className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-700">
+                          {labelOfBusinessType(u.businessType)}
+                        </span>
+                      ) : null}
                       <span className="text-xs text-gray-500">
                         {u.storeName ? `· ${u.storeName}` : '· (매장명 없음)'}
                       </span>
@@ -152,6 +176,14 @@ export function UserManager({ users, adminUsername }: Props) {
                       onClick={() => setStoreTarget(u)}
                     >
                       매장명 변경
+                    </button>
+                    <button
+                      type="button"
+                      disabled={pending}
+                      className="btn-secondary text-xs"
+                      onClick={() => setBusinessTarget(u)}
+                    >
+                      업종 변경
                     </button>
                     <button
                       type="button"
@@ -300,6 +332,73 @@ export function UserManager({ users, adminUsername }: Props) {
                 type="button"
                 className="btn-secondary text-sm"
                 onClick={() => setStoreTarget(null)}
+              >
+                취소
+              </button>
+              <button
+                type="submit"
+                disabled={pending}
+                className="btn-primary text-sm"
+              >
+                {pending ? '변경 중…' : '변경'}
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
+
+      {businessTarget ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setBusinessTarget(null)}
+        >
+          <form
+            className="card w-full max-w-sm"
+            onClick={(e) => e.stopPropagation()}
+            onSubmit={(e) => {
+              e.preventDefault();
+              const fd = new FormData(e.currentTarget);
+              const businessType = String(fd.get('businessType') ?? '');
+              setError(null);
+              setInfo(null);
+              startTransition(async () => {
+                const res = await updateBusinessTypeAction({
+                  userId: businessTarget.id,
+                  businessType,
+                });
+                if (res?.error) {
+                  setError(res.error);
+                  return;
+                }
+                setInfo(`${businessTarget.username} 업종이 변경됐습니다.`);
+                setBusinessTarget(null);
+                refresh();
+              });
+            }}
+          >
+            <h3 className="text-base font-semibold">
+              업종 변경 — {businessTarget.username}
+            </h3>
+            <select
+              name="businessType"
+              required
+              defaultValue={businessTarget.businessType || ''}
+              className="input mt-3"
+            >
+              <option value="" disabled>
+                업종 선택…
+              </option>
+              {BUSINESS_TYPES.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+            <div className="mt-3 flex justify-end gap-2">
+              <button
+                type="button"
+                className="btn-secondary text-sm"
+                onClick={() => setBusinessTarget(null)}
               >
                 취소
               </button>

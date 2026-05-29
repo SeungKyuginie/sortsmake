@@ -30,6 +30,7 @@ export default async function AdminPage() {
     id: string;
     username: string;
     storeName: string;
+    businessType: string;
     createdAt: string;
   }> = [];
   let listError: string | null = null;
@@ -43,6 +44,10 @@ export default async function AdminPage() {
       storeName:
         typeof u.user_metadata?.storeName === 'string'
           ? u.user_metadata.storeName
+          : '',
+      businessType:
+        typeof u.user_metadata?.businessType === 'string'
+          ? u.user_metadata.businessType
           : '',
       createdAt: u.created_at,
     }));
