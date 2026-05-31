@@ -520,12 +520,16 @@ app.post('/render', async (req, res) => {
       );
     }
 
-    // 워터마크 (좌하단 매장명) — 영상 전체 노출
+    // 워터마크 — 영상 전체 노출. 위치/크기 옵션.
     if (b.watermarkText && typeof b.watermarkText === 'string' && b.watermarkText.trim()) {
       const wmText = escText(b.watermarkText.trim());
       const wmFont = fontFile ? `fontfile=${fontFile}:` : '';
+      const wmPos = b.watermarkPosition === 'top' ? 'top' : 'bottom';
+      const wmSize = Math.max(20, Math.min(200, Math.round(Number(b.watermarkSize) || 40)));
+      const wmX = wmPos === 'top' ? '(w-text_w)/2' : '60';
+      const wmY = wmPos === 'top' ? '80' : `${HEIGHT - 90}`;
       drawNodes.push(
-        `drawtext=text='${wmText}':${wmFont}fontcolor=white@0.92:fontsize=40:shadowcolor=black@0.8:shadowx=2:shadowy=2:borderw=3:bordercolor=black@0.6:x=60:y=${HEIGHT - 90}`,
+        `drawtext=text='${wmText}':${wmFont}fontcolor=white@0.95:fontsize=${wmSize}:shadowcolor=black@0.8:shadowx=2:shadowy=2:borderw=4:bordercolor=black@0.7:x=${wmX}:y=${wmY}`,
       );
     }
 

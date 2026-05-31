@@ -67,7 +67,9 @@ export type RenderInput = {
   ctaEnd: number;
   audio: Blob;
   audioDurationSec: number;
-  watermarkText?: string; // 영상 전체에 좌하단 노출 (브랜드/매장명)
+  watermarkText?: string; // 영상 전체에 노출 (브랜드/매장명/데모표시)
+  watermarkPosition?: 'top' | 'bottom'; // top=중앙 상단, bottom=좌하단 (기본)
+  watermarkSize?: number; // 폰트 크기 (기본 40)
   bgm?: Blob | null;
   bgmVolume?: number; // 0..1, default 0.16
   voiceVolume?: number; // default 1.0
@@ -416,6 +418,8 @@ export async function renderVideo(
     audio,
     audioDurationSec,
     watermarkText,
+    watermarkPosition = 'bottom',
+    watermarkSize = 40,
     bgm,
     bgmVolume = 0.16,
     voiceVolume = 1.0,
@@ -573,12 +577,15 @@ export async function renderVideo(
     );
   }
 
-  // 워터마크 (좌하단 매장명) — 영상 전체 노출
+  // 워터마크 — 영상 전체 노출. 위치/크기 옵션.
   if (watermarkText && watermarkText.trim()) {
     const wmText = esc(watermarkText.trim());
     const wmFont = fontFile ? `fontfile=${fontFile}:` : '';
+    const wmSize = Math.max(20, Math.min(200, Math.round(watermarkSize)));
+    const wmX = watermarkPosition === 'top' ? '(w-text_w)/2' : '60';
+    const wmY = watermarkPosition === 'top' ? '80' : `${HEIGHT - 90}`;
     drawNodes.push(
-      `drawtext=text='${wmText}':${wmFont}fontcolor=white@0.92:fontsize=40:shadowcolor=black@0.8:shadowx=2:shadowy=2:borderw=3:bordercolor=black@0.6:x=60:y=${HEIGHT - 90}`,
+      `drawtext=text='${wmText}':${wmFont}fontcolor=white@0.95:fontsize=${wmSize}:shadowcolor=black@0.8:shadowx=2:shadowy=2:borderw=4:bordercolor=black@0.7:x=${wmX}:y=${wmY}`,
     );
   }
 

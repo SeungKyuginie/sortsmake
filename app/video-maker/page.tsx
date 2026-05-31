@@ -141,6 +141,7 @@ export default function VideoMakerPage() {
   const [storeName, setStoreName] = useState('');
   const [storeNameLocked, setStoreNameLocked] = useState(false);
   const [isPhotoStudio, setIsPhotoStudio] = useState(false);
+  const [username, setUsername] = useState<string>('');
   const [photos, setPhotos] = useState<CornerPhoto[]>([]);
   const [duration, setDuration] = useState(30);
   // 프레임 스타일: cover(꽉 채우기, 현재 동작) / blur(블러 액자 + 풀 가로 패닝)
@@ -362,13 +363,14 @@ export default function VideoMakerPage() {
     let cancelled = false;
     (async () => {
       try {
-        const { storeName: s, businessType: bt } = await getMyStoreName();
+        const { storeName: s, businessType: bt, username: u } = await getMyStoreName();
         if (cancelled) return;
         if (s) {
           setStoreName(s);
           setStoreNameLocked(true);
         }
         if (bt === 'photo_studio') setIsPhotoStudio(true);
+        if (u) setUsername(u);
       } catch {
         // 비로그인/오류 시 잠금 없이 사용 가능
       }
@@ -1225,6 +1227,10 @@ export default function VideoMakerPage() {
             audioDurationSec: voice.totalDur,
             bgm: bgmFile,
             bgmVolume,
+            watermarkText:
+              username === 'test' || username === 'test1' ? '데모용' : undefined,
+            watermarkPosition: 'top',
+            watermarkSize: 80,
             hookText: script.hook,
             hookStart,
             hookEnd,
@@ -1264,6 +1270,10 @@ export default function VideoMakerPage() {
             audioDurationSec: voice.totalDur,
             bgm: bgmFile,
             bgmVolume,
+            watermarkText:
+              username === 'test' || username === 'test1' ? '데모용' : undefined,
+            watermarkPosition: 'top',
+            watermarkSize: 80,
           },
           ({ ratio, message }) => {
             setRenderRatio(ratio);
