@@ -327,29 +327,42 @@ function buildItemChain(
     );
   }
 
-  // 줌인/줌아웃 효과 (이미지 전용).
-  // 줌아웃: 1.3x(클로즈업) → 1.0x(사진 전체 보임 + 블러 액자). 마지막에 모든 콘텐츠가 보임.
-  // 줌인: 1.0x(사진 전체 보임 + 블러 액자) → 1.3x(클로즈업).
+  // 줌인/줌아웃 효과 (이미지 전용). 부드럽게:
+  // 1) 선형 z 보간 (on/(d-1))으로 누적 오차 제거
+  // 2) 사전 2배 확대 + lanczos로 픽셀 정렬 흔들림 감소
+  // 3) 사진 비율에 맞춰 fg 출력 크기 계산 (왜곡 방지)
   if (!isVideo && (effectMode === 'zoom_in' || effectMode === 'zoom_out')) {
     const frames = Math.max(2, Math.round(T * FPS));
     const zoomFrom = effectMode === 'zoom_in' ? 1.0 : 1.3;
     const zoomTo = effectMode === 'zoom_in' ? 1.3 : 1.0;
-    const step = ((zoomTo - zoomFrom) / (frames - 1)).toFixed(6);
-    const zExpr =
-      effectMode === 'zoom_in'
-        ? `min(${zoomTo.toFixed(2)},zoom+${step})`
-        : `max(${zoomTo.toFixed(2)},zoom-${(-Number(step)).toFixed(6)})`;
-    const initZ = zoomFrom.toFixed(2);
+    const delta = (zoomTo - zoomFrom).toFixed(3);
+    const zExpr = `${zoomFrom.toFixed(3)}${(zoomTo - zoomFrom) >= 0 ? '+' : ''}${delta}*on/(d-1)`;
+
+    // 사진 비율에 맞춰 fg 크기 산출 (왜곡 방지)
+    let fgW = WIDTH;
+    let fgH = HEIGHT;
+    if (srcWidth && srcHeight) {
+      const srcAspect = srcWidth / srcHeight;
+      const canvasAspect = WIDTH / HEIGHT;
+      if (srcAspect > canvasAspect) {
+        fgW = WIDTH;
+        fgH = Math.max(2, Math.round((WIDTH / srcAspect) / 2) * 2);
+      } else {
+        fgH = HEIGHT;
+        fgW = Math.max(2, Math.round((HEIGHT * srcAspect) / 2) * 2);
+      }
+    }
+    const upFgW = fgW * 2;
+    const upFgH = fgH * 2;
+
     return (
       `[${idx}:v]split=2[bg${idx}][fg${idx}];` +
       `[bg${idx}]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,` +
       `crop=${WIDTH}:${HEIGHT},boxblur=24:4,setsar=1[bgX${idx}];` +
-      // FG: fit-decrease로 사진 전체 보이게 한 후 zoompan
-      `[fg${idx}]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=decrease,setsar=1,` +
+      `[fg${idx}]scale=${upFgW}:${upFgH}:flags=lanczos,setsar=1,` +
       `trim=end_frame=1,setpts=PTS-STARTPTS,` +
-      `zoompan=z='if(eq(on,1),${initZ},${zExpr})':` +
-      `x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':` +
-      `d=${frames}:s=${WIDTH}x${HEIGHT}:fps=${FPS}[fgX${idx}];` +
+      `zoompan=z='${zExpr}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':` +
+      `d=${frames}:s=${fgW}x${fgH}:fps=${FPS}[fgX${idx}];` +
       `[bgX${idx}][fgX${idx}]overlay=(W-w)/2:(H-h)/2,` +
       `fps=${FPS},format=yuv420p,setpts=PTS-STARTPTS[v${idx}]`
     );

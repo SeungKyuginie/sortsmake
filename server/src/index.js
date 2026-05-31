@@ -276,28 +276,38 @@ function buildItemChain(idx, T, opts) {
     );
   }
 
-  // 줌인/줌아웃 (이미지 전용)
-  // 줌아웃: 1.3x → 1.0x (사진 전체 보임 + 블러 액자)
-  // 줌인: 1.0x → 1.3x
+  // 줌인/줌아웃 (이미지 전용) — 부드럽게: 선형 보간 + 2배 사전확대 + lanczos + 비율 보존
   if (!isVideo && (effectMode === 'zoom_in' || effectMode === 'zoom_out')) {
     const frames = Math.max(2, Math.round(T * FPS));
     const zoomFrom = effectMode === 'zoom_in' ? 1.0 : 1.3;
     const zoomTo = effectMode === 'zoom_in' ? 1.3 : 1.0;
-    const step = ((zoomTo - zoomFrom) / (frames - 1)).toFixed(6);
-    const zExpr =
-      effectMode === 'zoom_in'
-        ? `min(${zoomTo.toFixed(2)},zoom+${step})`
-        : `max(${zoomTo.toFixed(2)},zoom-${(-Number(step)).toFixed(6)})`;
-    const initZ = zoomFrom.toFixed(2);
+    const delta = (zoomTo - zoomFrom).toFixed(3);
+    const zExpr = `${zoomFrom.toFixed(3)}${(zoomTo - zoomFrom) >= 0 ? '+' : ''}${delta}*on/(d-1)`;
+
+    let fgW = WIDTH;
+    let fgH = HEIGHT;
+    if (srcWidth && srcHeight) {
+      const srcAspect = srcWidth / srcHeight;
+      const canvasAspect = WIDTH / HEIGHT;
+      if (srcAspect > canvasAspect) {
+        fgW = WIDTH;
+        fgH = Math.max(2, Math.round((WIDTH / srcAspect) / 2) * 2);
+      } else {
+        fgH = HEIGHT;
+        fgW = Math.max(2, Math.round((HEIGHT * srcAspect) / 2) * 2);
+      }
+    }
+    const upFgW = fgW * 2;
+    const upFgH = fgH * 2;
+
     return (
       `[${idx}:v]split=2[bg${idx}][fg${idx}];` +
       `[bg${idx}]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,` +
       `crop=${WIDTH}:${HEIGHT},boxblur=24:4,setsar=1[bgX${idx}];` +
-      `[fg${idx}]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=decrease,setsar=1,` +
+      `[fg${idx}]scale=${upFgW}:${upFgH}:flags=lanczos,setsar=1,` +
       `trim=end_frame=1,setpts=PTS-STARTPTS,` +
-      `zoompan=z='if(eq(on,1),${initZ},${zExpr})':` +
-      `x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':` +
-      `d=${frames}:s=${WIDTH}x${HEIGHT}:fps=${FPS}[fgX${idx}];` +
+      `zoompan=z='${zExpr}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':` +
+      `d=${frames}:s=${fgW}x${fgH}:fps=${FPS}[fgX${idx}];` +
       `[bgX${idx}][fgX${idx}]overlay=(W-w)/2:(H-h)/2,` +
       `fps=${FPS},format=yuv420p,setpts=PTS-STARTPTS[v${idx}]`
     );
