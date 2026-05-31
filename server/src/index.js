@@ -513,7 +513,7 @@ app.post('/render', async (req, res) => {
       const wmX = wmPos === 'top' ? '(w-text_w)/2' : '60';
       const wmY = wmPos === 'top' ? '80' : `${HEIGHT - 90}`;
       drawNodes.push(
-        `drawtext=text='${wmText}':${wmFont}fontcolor=white@0.95:fontsize=${wmSize}:shadowcolor=black@0.8:shadowx=2:shadowy=2:borderw=4:bordercolor=black@0.7:x=${wmX}:y=${wmY}`,
+        `drawtext=text='${wmText}':${wmFont}fontcolor=white:fontsize=${wmSize}:shadowcolor=black:shadowx=2:shadowy=2:x=${wmX}:y=${wmY}`,
       );
     }
 
