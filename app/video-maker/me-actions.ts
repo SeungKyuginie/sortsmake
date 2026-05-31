@@ -1,10 +1,12 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
+import { emailToUsername } from '@/lib/auth/id';
 
 export async function getMyStoreName(): Promise<{
   storeName: string;
   businessType: string;
+  username: string;
 }> {
   const supabase = createClient();
   const {
@@ -18,5 +20,6 @@ export async function getMyStoreName(): Promise<{
     user?.user_metadata && typeof user.user_metadata.businessType === 'string'
       ? user.user_metadata.businessType
       : '';
-  return { storeName, businessType };
+  const username = emailToUsername(user?.email);
+  return { storeName, businessType, username };
 }

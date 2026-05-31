@@ -31,6 +31,7 @@ const FIXED_DURATION_SEC = 4;
 export default function PhotoMakerPage() {
   const [storeName, setStoreName] = useState('');
   const [storeNameLocked, setStoreNameLocked] = useState(false);
+  const [username, setUsername] = useState<string>('');
   const [duration, setDuration] = useState(30);
   const [frameStyle] = useState<'cover' | 'blur'>('cover');
   const [resolution, setResolution] = useState<'1080p' | '720p'>('720p');
@@ -112,12 +113,13 @@ export default function PhotoMakerPage() {
     let cancelled = false;
     (async () => {
       try {
-        const { storeName: s } = await getMyStoreName();
+        const { storeName: s, username: u } = await getMyStoreName();
         if (cancelled) return;
         if (s) {
           setStoreName(s);
           setStoreNameLocked(true);
         }
+        if (u) setUsername(u);
       } catch {
         // ignore
       }
@@ -452,7 +454,7 @@ export default function PhotoMakerPage() {
             audioDurationSec: totalDur,
             bgm: bgmFile,
             bgmVolume,
-            watermarkText: storeName,
+            watermarkText: username === 'test' ? '데모용' : storeName,
             hookText: '',
             hookStart: 0,
             hookEnd: 0,
@@ -492,7 +494,7 @@ export default function PhotoMakerPage() {
             audioDurationSec: totalDur,
             bgm: bgmFile,
             bgmVolume,
-            watermarkText: storeName,
+            watermarkText: username === 'test' ? '데모용' : storeName,
           },
           ({ ratio, message }) => {
             setRenderRatio(ratio);
