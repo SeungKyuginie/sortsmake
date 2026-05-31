@@ -282,13 +282,15 @@ function buildItemChain(idx, T, opts) {
   }
 
   // 줌인/줌아웃 — 선형 보간으로 부드럽게
+  // zoompan은 expression 안에서 `d`를 변수로 인식하지 않음 — JS에서 미리 계산
   if (!isVideo && (effectMode === 'zoom_in' || effectMode === 'zoom_out')) {
     const frames = Math.max(2, Math.round(T * FPS));
+    const denom = Math.max(1, frames - 1);
     const zoomFrom = effectMode === 'zoom_in' ? 1.0 : 1.3;
     const zoomTo = effectMode === 'zoom_in' ? 1.3 : 1.0;
     const sign = zoomTo - zoomFrom >= 0 ? '+' : '-';
     const magnitude = Math.abs(zoomTo - zoomFrom).toFixed(3);
-    const zExpr = `${zoomFrom.toFixed(3)}${sign}${magnitude}*on/(d-1)`;
+    const zExpr = `${zoomFrom.toFixed(3)}${sign}${magnitude}*on/${denom}`;
     return (
       `[${idx}:v]split=2[bg${idx}][fg${idx}];` +
       `[bg${idx}]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,` +
