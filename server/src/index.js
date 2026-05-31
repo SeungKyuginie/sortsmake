@@ -552,7 +552,13 @@ app.post('/render', async (req, res) => {
     // 7) ffmpeg args
     const args = [];
     for (let i = 0; i < N; i++) {
-      args.push('-loop', '1', '-t', itemDurations[i].toFixed(3), '-i', photoFiles[i]);
+      // 영상 파일이면 -loop 1을 쓰면 안 됨 (이미지 전용 옵션)
+      const isVid = Array.isArray(b.photoKinds) && b.photoKinds[i] === 'video';
+      if (isVid) {
+        args.push('-t', itemDurations[i].toFixed(3), '-i', photoFiles[i]);
+      } else {
+        args.push('-loop', '1', '-t', itemDurations[i].toFixed(3), '-i', photoFiles[i]);
+      }
     }
     args.push('-i', audioFile);
     if (bgmFile) args.push('-i', bgmFile);

@@ -1017,12 +1017,28 @@ export default function VideoMakerPage() {
         }),
       );
       setStep('script', { status: 'active', detail: '이미지 분석 + 카피 작성 중…' });
+
+      // AI 영상화한 사진은 각 5초 필요 (Runway Gen-4 Turbo 최소 길이)
+      // 그 시간을 보장하도록 목표 영상 길이 자동 확장
+      const aiCount = photos.filter(
+        (p) => p.aiAnimateStatus === 'done',
+      ).length;
+      const aiSec = aiCount * 5;
+      const staticCount = photos.length - aiCount;
+      const staticAvgSec = staticCount > 0
+        ? Math.max(2, (duration - aiSec) / staticCount)
+        : 0;
+      // AI 5초 + 정지 평균. 사용자 설정 길이보다 크면 그 값 사용.
+      const effectiveDuration = aiCount > 0
+        ? Math.max(duration, Math.round(aiSec + staticCount * staticAvgSec))
+        : duration;
+
       const res = await fetch('/api/generate-script', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           storeName,
-          durationSeconds: duration,
+          durationSeconds: effectiveDuration,
           speakingRate,
           corners: encoded,
         }),
