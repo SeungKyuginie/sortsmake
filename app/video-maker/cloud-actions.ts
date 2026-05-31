@@ -16,6 +16,7 @@ export type CloudPhoto = {
   originalKind?: 'image' | 'video';
   fixedDurationSec?: number;
   effectMode?: 'static' | 'pan' | 'zoom_in' | 'zoom_out';
+  aiAnimated?: boolean; // Runway AI 영상화 결과 여부
 };
 
 export type CloudState = {

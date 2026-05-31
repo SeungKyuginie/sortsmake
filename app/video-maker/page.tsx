@@ -462,6 +462,7 @@ export default function VideoMakerPage() {
                   fixedDurationSec: cp.fixedDurationSec,
                   effectMode: cp.effectMode,
                   droneAiStatus: cp.droneShot ? 'ready' : 'idle',
+                  aiAnimateStatus: cp.aiAnimated ? 'done' : 'idle',
                   uploadStatus: 'uploaded',
                 };
               } catch {
@@ -512,6 +513,7 @@ export default function VideoMakerPage() {
         originalKind: p.originalKind,
         fixedDurationSec: p.fixedDurationSec,
         effectMode: p.effectMode,
+        aiAnimated: p.aiAnimateStatus === 'done',
       }));
     const payload: CloudState = {
       storeNameOverride: storeNameLocked ? undefined : storeName,
