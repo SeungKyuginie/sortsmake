@@ -455,7 +455,8 @@ export default function PhotoMakerPage() {
             audioDurationSec: totalDur,
             bgm: bgmFile,
             bgmVolume,
-            watermarkText: username === 'test' ? '데모용' : storeName,
+            watermarkText:
+              username === 'test' || username === 'test1' ? '데모용' : storeName,
             hookText: '',
             hookStart: 0,
             hookEnd: 0,
@@ -495,7 +496,8 @@ export default function PhotoMakerPage() {
             audioDurationSec: totalDur,
             bgm: bgmFile,
             bgmVolume,
-            watermarkText: username === 'test' ? '데모용' : storeName,
+            watermarkText:
+              username === 'test' || username === 'test1' ? '데모용' : storeName,
           },
           ({ ratio, message }) => {
             setRenderRatio(ratio);
