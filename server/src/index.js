@@ -276,38 +276,22 @@ function buildItemChain(idx, T, opts) {
     );
   }
 
-  // 줌인/줌아웃 (이미지 전용) — 부드럽게: 선형 보간 + 2배 사전확대 + lanczos + 비율 보존
+  // 줌인/줌아웃 — 선형 보간으로 부드럽게
   if (!isVideo && (effectMode === 'zoom_in' || effectMode === 'zoom_out')) {
     const frames = Math.max(2, Math.round(T * FPS));
     const zoomFrom = effectMode === 'zoom_in' ? 1.0 : 1.3;
     const zoomTo = effectMode === 'zoom_in' ? 1.3 : 1.0;
-    const delta = (zoomTo - zoomFrom).toFixed(3);
-    const zExpr = `${zoomFrom.toFixed(3)}${(zoomTo - zoomFrom) >= 0 ? '+' : ''}${delta}*on/(d-1)`;
-
-    let fgW = WIDTH;
-    let fgH = HEIGHT;
-    if (srcWidth && srcHeight) {
-      const srcAspect = srcWidth / srcHeight;
-      const canvasAspect = WIDTH / HEIGHT;
-      if (srcAspect > canvasAspect) {
-        fgW = WIDTH;
-        fgH = Math.max(2, Math.round((WIDTH / srcAspect) / 2) * 2);
-      } else {
-        fgH = HEIGHT;
-        fgW = Math.max(2, Math.round((HEIGHT * srcAspect) / 2) * 2);
-      }
-    }
-    const upFgW = fgW * 2;
-    const upFgH = fgH * 2;
-
+    const sign = zoomTo - zoomFrom >= 0 ? '+' : '-';
+    const magnitude = Math.abs(zoomTo - zoomFrom).toFixed(3);
+    const zExpr = `${zoomFrom.toFixed(3)}${sign}${magnitude}*on/(d-1)`;
     return (
       `[${idx}:v]split=2[bg${idx}][fg${idx}];` +
       `[bg${idx}]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,` +
       `crop=${WIDTH}:${HEIGHT},boxblur=24:4,setsar=1[bgX${idx}];` +
-      `[fg${idx}]scale=${upFgW}:${upFgH}:flags=lanczos,setsar=1,` +
+      `[fg${idx}]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=decrease:flags=lanczos,setsar=1,` +
       `trim=end_frame=1,setpts=PTS-STARTPTS,` +
       `zoompan=z='${zExpr}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':` +
-      `d=${frames}:s=${fgW}x${fgH}:fps=${FPS}[fgX${idx}];` +
+      `d=${frames}:s=${WIDTH}x${HEIGHT}:fps=${FPS}[fgX${idx}];` +
       `[bgX${idx}][fgX${idx}]overlay=(W-w)/2:(H-h)/2,` +
       `fps=${FPS},format=yuv420p,setpts=PTS-STARTPTS[v${idx}]`
     );
