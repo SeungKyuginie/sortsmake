@@ -20,6 +20,7 @@ export type CloudRenderInput = {
     height?: number;
     droneShot?: boolean;
     effectMode?: 'static' | 'pan' | 'zoom_in' | 'zoom_out';
+    isAiAnimated?: boolean;
   }[];
   itemDurations: number[];
   frameStyle?: 'cover' | 'blur';
@@ -159,6 +160,7 @@ export async function renderOnCloud(
       droneShots: items.map((it) => !!it.droneShot),
       effectModes: items.map((it) => it.effectMode ?? null),
       photoKinds: items.map((it) => it.kind),
+      aiAnimatedFlags: items.map((it) => !!it.isAiAnimated),
       frameStyle: input.frameStyle ?? 'cover',
       panRatio: input.panRatio ?? 0.6,
       resolution: input.resolution ?? '1080p',

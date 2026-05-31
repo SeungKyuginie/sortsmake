@@ -208,8 +208,32 @@ function drawWrappedTextNodes(text, baseOpts) {
 // ───────────────────────── 필터 그래프 ─────────────────────────
 
 function buildItemChain(idx, T, opts) {
-  const { droneShot = false, frameStyle = 'cover', panRatio = 0.6, srcWidth, srcHeight, effectMode = undefined, isVideo = false } = opts;
+  const { droneShot = false, frameStyle = 'cover', panRatio = 0.6, srcWidth, srcHeight, effectMode = undefined, isVideo = false, isAiAnimated = false } = opts;
   const Tstr = T.toFixed(3);
+
+  // 영상 파일 (사용자 업로드 비디오 또는 AI 영상화 결과)
+  if (isVideo) {
+    const Tstr = T.toFixed(3);
+    // AI 영상화: 이미 9:16 → 블러 없이 풀스크린
+    if (isAiAnimated) {
+      return (
+        `[${idx}:v]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,` +
+        `crop=${WIDTH}:${HEIGHT},setsar=1,` +
+        `tpad=stop_mode=clone:stop_duration=${Tstr},trim=duration=${Tstr},setpts=PTS-STARTPTS,` +
+        `fps=${FPS},format=yuv420p[v${idx}]`
+      );
+    }
+    // 일반 영상: 블러 액자 + 컨테인
+    return (
+      `[${idx}:v]split=2[bg${idx}][fg${idx}];` +
+      `[bg${idx}]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,` +
+      `crop=${WIDTH}:${HEIGHT},boxblur=24:4,setsar=1[bgX${idx}];` +
+      `[fg${idx}]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=decrease,setsar=1[fgX${idx}];` +
+      `[bgX${idx}][fgX${idx}]overlay=(W-w)/2:(H-h)/2,` +
+      `tpad=stop_mode=clone:stop_duration=${Tstr},trim=duration=${Tstr},setpts=PTS-STARTPTS,` +
+      `fps=${FPS},format=yuv420p[v${idx}]`
+    );
+  }
 
   if (droneShot) {
     const droneFrames = Math.max(2, Math.round(T * FPS));
@@ -432,6 +456,7 @@ app.post('/render', async (req, res) => {
         srcHeight: Array.isArray(b.photoHeights) ? b.photoHeights[i] : undefined,
         effectMode: Array.isArray(b.effectModes) ? (b.effectModes[i] ?? undefined) : undefined,
         isVideo: Array.isArray(b.photoKinds) ? b.photoKinds[i] === 'video' : false,
+        isAiAnimated: Array.isArray(b.aiAnimatedFlags) ? !!b.aiAnimatedFlags[i] : false,
       }),
     );
 

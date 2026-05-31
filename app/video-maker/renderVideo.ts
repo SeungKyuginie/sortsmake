@@ -51,6 +51,7 @@ export type RenderInput = {
   itemDurations: number[]; // sum === audioDurationSec
   droneShots?: boolean[]; // per-item drone shot flag (images only)
   effectModes?: (('static' | 'pan' | 'zoom_in' | 'zoom_out') | undefined)[]; // per-item motion effect (undefined = default panRatio)
+  aiAnimatedFlags?: boolean[]; // per-item: true = Runway AI video (full-screen, no blur frame)
   // 'cover': 사진을 화면에 꽉 채움 (현재 동작, 가로 사진 좌우 패닝)
   // 'blur': 사진을 살짝만 확대 + 위아래 블러 + 전체 가로 풀 패닝
   frameStyle?: 'cover' | 'blur';
@@ -230,10 +231,20 @@ function buildItemChain(
   srcHeight?: number,
   panRatio = 0.6,
   effectMode: 'static' | 'pan' | 'zoom_in' | 'zoom_out' | undefined = undefined,
+  isAiAnimated = false,
 ): string {
   const Tstr = T.toFixed(3);
 
   if (isVideo) {
+    // AI 영상화 결과: 이미 9:16 풀스크린 → 블러 액자 없이 그대로 표시
+    if (isAiAnimated) {
+      return (
+        `[${idx}:v]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,` +
+        `crop=${WIDTH}:${HEIGHT},setsar=1,` +
+        `tpad=stop_mode=clone:stop_duration=${Tstr},trim=duration=${Tstr},setpts=PTS-STARTPTS,` +
+        `fps=${FPS},format=yuv420p[v${idx}]`
+      );
+    }
     return (
       `[${idx}:v]split=2[bg${idx}][fg${idx}];` +
       `[bg${idx}]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,` +
@@ -390,6 +401,7 @@ export async function renderVideo(
     itemDurations: rawItemDurations,
     droneShots,
     effectModes,
+    aiAnimatedFlags,
     frameStyle = 'cover',
     panRatio = 0.6,
     resolution = '1080p',
@@ -478,6 +490,7 @@ export async function renderVideo(
       it.height,
       safePan,
       effectModes?.[i] ?? 'pan',
+      aiAnimatedFlags?.[i] ?? false,
     ),
   );
 

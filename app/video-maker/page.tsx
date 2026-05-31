@@ -146,7 +146,7 @@ export default function VideoMakerPage() {
   const [photos, setPhotos] = useState<CornerPhoto[]>([]);
   const [duration, setDuration] = useState(30);
   // 프레임 스타일: cover(꽉 채우기, 현재 동작) / blur(블러 액자 + 풀 가로 패닝)
-  const [frameStyle, setFrameStyle] = useState<'cover' | 'blur'>('cover');
+  const [frameStyle, setFrameStyle] = useState<'cover' | 'blur'>('blur');
   // 패닝 속도: 0(정적) ~ 1(최대) — cover/blur 모드 공통
   const [panRatio, setPanRatio] = useState(0.6);
   // 출력 해상도: 720p 기본 (모바일 시청 충분 + 빠른 렌더링). 1080p는 옵션.
@@ -1304,6 +1304,7 @@ export default function VideoMakerPage() {
               width: p.width,
               height: p.height,
               droneShot: p.droneShot,
+              isAiAnimated: p.aiAnimateStatus === 'done',
             })),
             itemDurations,
             frameStyle,
@@ -1342,6 +1343,7 @@ export default function VideoMakerPage() {
             })),
             itemDurations,
             droneShots: photosForRender.map((p) => p.droneShot ?? false),
+            aiAnimatedFlags: photosForRender.map((p) => p.aiAnimateStatus === 'done'),
             frameStyle,
             panRatio,
             resolution,
