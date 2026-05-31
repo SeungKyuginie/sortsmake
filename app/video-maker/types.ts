@@ -25,6 +25,9 @@ export type CornerPhoto = {
   fixedDurationSec?: number;
   // 사진별 모션 효과: 정지/패닝/줌인/줌아웃. 기본 undefined → 패닝.
   effectMode?: 'static' | 'pan' | 'zoom_in' | 'zoom_out';
+  // AI 영상화 상태 (Runway)
+  aiAnimateStatus?: 'idle' | 'animating' | 'done' | 'error';
+  aiAnimateError?: string;
 };
 
 export type StepKey = 'upload' | 'script' | 'voice' | 'render' | 'done';

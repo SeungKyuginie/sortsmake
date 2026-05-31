@@ -2,11 +2,13 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { emailToUsername } from '@/lib/auth/id';
+import { isAdminUsername } from '@/lib/auth/admin';
 
 export async function getMyStoreName(): Promise<{
   storeName: string;
   businessType: string;
   username: string;
+  isAdmin: boolean;
 }> {
   const supabase = createClient();
   const {
@@ -21,5 +23,6 @@ export async function getMyStoreName(): Promise<{
       ? user.user_metadata.businessType
       : '';
   const username = emailToUsername(user?.email);
-  return { storeName, businessType, username };
+  const isAdmin = isAdminUsername(username);
+  return { storeName, businessType, username, isAdmin };
 }

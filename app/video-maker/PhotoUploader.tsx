@@ -20,6 +20,9 @@ type Props = {
   hideCornerInputs?: boolean;
   // 효과 모드 버튼 (↔/🔍+/🔍-) 노출 (사진관 등에서만)
   showEffectButtons?: boolean;
+  // AI 영상화 버튼 노출 (관리자 베타 전용)
+  showAiAnimateButton?: boolean;
+  onAiAnimate?: (id: string) => void;
 };
 
 export function PhotoUploader({
@@ -35,6 +38,8 @@ export function PhotoUploader({
   hideDroneButton = false,
   hideCornerInputs = false,
   showEffectButtons = false,
+  showAiAnimateButton = false,
+  onAiAnimate,
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -125,6 +130,27 @@ export function PhotoUploader({
                           onClick={() => onCancelDrone?.(p.id)}
                         >
                           🚁 드론샷 적용됨
+                        </button>
+                      )}
+                      {showAiAnimateButton && p.kind === 'image' && (
+                        <button
+                          type="button"
+                          title="AI로 사진을 5초 영상으로 변환 (Runway Gen-4 Turbo · 관리자 베타)"
+                          disabled={p.aiAnimateStatus === 'animating'}
+                          className={`whitespace-nowrap rounded border px-2 py-1 text-xs font-medium transition ${
+                            p.aiAnimateStatus === 'animating'
+                              ? 'cursor-wait border-gray-300 bg-gray-200 text-gray-500'
+                              : p.aiAnimateStatus === 'done'
+                                ? 'border-purple-500 bg-purple-500 text-white'
+                                : 'border-gray-300 bg-white text-purple-700 hover:bg-purple-50'
+                          }`}
+                          onClick={() => onAiAnimate?.(p.id)}
+                        >
+                          {p.aiAnimateStatus === 'animating'
+                            ? '🎬 변환 중…'
+                            : p.aiAnimateStatus === 'done'
+                              ? '🎬 영상화 완료'
+                              : '🎬 AI 영상화'}
                         </button>
                       )}
                       {showEffectButtons && p.kind === 'image' && !p.droneShot && (
@@ -246,6 +272,11 @@ export function PhotoUploader({
                   {p.droneAiError ? (
                     <div className="rounded-md bg-red-50 border border-red-200 p-2 text-xs text-red-700">
                       드론샷 생성 실패: {p.droneAiError}
+                    </div>
+                  ) : null}
+                  {p.aiAnimateError ? (
+                    <div className="rounded-md bg-red-50 border border-red-200 p-2 text-xs text-red-700">
+                      AI 영상화 실패: {p.aiAnimateError}
                     </div>
                   ) : null}
                 </div>

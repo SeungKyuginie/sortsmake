@@ -142,6 +142,7 @@ export default function VideoMakerPage() {
   const [storeNameLocked, setStoreNameLocked] = useState(false);
   const [isPhotoStudio, setIsPhotoStudio] = useState(false);
   const [username, setUsername] = useState<string>('');
+  const [isAdmin, setIsAdmin] = useState(false);
   const [photos, setPhotos] = useState<CornerPhoto[]>([]);
   const [duration, setDuration] = useState(30);
   // 프레임 스타일: cover(꽉 채우기, 현재 동작) / blur(블러 액자 + 풀 가로 패닝)
@@ -363,7 +364,7 @@ export default function VideoMakerPage() {
     let cancelled = false;
     (async () => {
       try {
-        const { storeName: s, businessType: bt, username: u } = await getMyStoreName();
+        const { storeName: s, businessType: bt, username: u, isAdmin: a } = await getMyStoreName();
         if (cancelled) return;
         if (s) {
           setStoreName(s);
@@ -371,6 +372,7 @@ export default function VideoMakerPage() {
         }
         if (bt === 'photo_studio') setIsPhotoStudio(true);
         if (u) setUsername(u);
+        if (a) setIsAdmin(true);
       } catch {
         // 비로그인/오류 시 잠금 없이 사용 가능
       }
@@ -811,6 +813,74 @@ export default function VideoMakerPage() {
       [copy[idx], copy[target]] = [copy[target], copy[idx]];
       return copy;
     });
+  };
+
+  // AI 영상화 (Runway Gen-4 Turbo) — 관리자 베타. 사진 → 5초 영상 클립.
+  const onAiAnimate = async (id: string) => {
+    const target = photos.find((p) => p.id === id);
+    if (!target || target.kind !== 'image') return;
+    setPhotos((p) =>
+      p.map((x) =>
+        x.id === id
+          ? { ...x, aiAnimateStatus: 'animating', aiAnimateError: undefined }
+          : x,
+      ),
+    );
+    try {
+      const { base64, mediaType } = await encodeImageForClaude(target.file);
+      const res = await fetch('/api/runway-animate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageBase64: base64, mediaType }),
+      });
+      if (!res.ok) {
+        const d = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(d.error || `Runway 호출 실패 (${res.status})`);
+      }
+      const d = (await res.json()) as { videoUrl?: string };
+      if (!d.videoUrl) throw new Error('영상 URL 없음');
+
+      // 영상 다운로드 → File로 변환 → 사진 슬롯 교체
+      const vRes = await fetch(d.videoUrl);
+      if (!vRes.ok)
+        throw new Error(`영상 다운로드 실패 (${vRes.status})`);
+      const blob = await vRes.blob();
+      const newFile = new File(
+        [blob],
+        `ai-${target.id}-${Date.now()}.mp4`,
+        { type: blob.type || 'video/mp4' },
+      );
+      const localUrl = URL.createObjectURL(newFile);
+      setPhotos((p) =>
+        p.map((x) =>
+          x.id === id
+            ? {
+                ...x,
+                originalFile: x.originalFile ?? x.file,
+                originalPreviewUrl: x.originalPreviewUrl ?? x.previewUrl,
+                originalKind: x.originalKind ?? x.kind,
+                file: newFile,
+                previewUrl: localUrl,
+                kind: 'video',
+                aiAnimateStatus: 'done',
+                aiAnimateError: undefined,
+                // 영상이 되었으므로 storagePath 무효화 (다시 업로드 필요)
+                storagePath: undefined,
+                uploadStatus: 'idle',
+              }
+            : x,
+        ),
+      );
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'AI 영상화 실패';
+      setPhotos((p) =>
+        p.map((x) =>
+          x.id === id
+            ? { ...x, aiAnimateStatus: 'error', aiAnimateError: msg }
+            : x,
+        ),
+      );
+    }
   };
 
   // 드론샷 생성 — Gemini가 사진을 항공 시점으로 변환 + ffmpeg 줌아웃 효과
@@ -1566,6 +1636,8 @@ export default function VideoMakerPage() {
           onReorder={onReorder}
           onGenerateDrone={onGenerateDrone}
           onCancelDrone={onCancelDrone}
+          showAiAnimateButton={isAdmin}
+          onAiAnimate={onAiAnimate}
         />
       </section>
 
