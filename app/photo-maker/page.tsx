@@ -6,6 +6,7 @@ import { BgmLibrary } from '../video-maker/BgmLibrary';
 import { PhotoUploader } from '../video-maker/PhotoUploader';
 import { LogoutButton } from '../video-maker/LogoutButton';
 import { getMyStoreName } from '../video-maker/me-actions';
+import { recordRender } from '../video-maker/render-log-actions';
 import {
   loadCloudState,
   saveCloudState,
@@ -503,6 +504,12 @@ export default function PhotoMakerPage() {
         );
       }
       setVideoBlob(blob);
+      recordRender({
+        kind: 'photo_studio',
+        durationSec: totalDur,
+        sizeBytes: blob.size,
+        storeName,
+      }).catch(() => undefined);
     } catch (e) {
       setError(e instanceof Error ? e.message : '렌더링 실패');
     } finally {

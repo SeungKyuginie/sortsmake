@@ -7,6 +7,7 @@ import { BgmLibrary } from './BgmLibrary';
 import { PhotoUploader } from './PhotoUploader';
 import { LogoutButton } from './LogoutButton';
 import { getMyStoreName } from './me-actions';
+import { recordRender } from './render-log-actions';
 import {
   loadCloudState,
   saveCloudState,
@@ -1276,6 +1277,12 @@ export default function VideoMakerPage() {
         detail: `${(blob.size / 1024 / 1024).toFixed(1)} MB`,
       });
       setStep('done', { status: 'complete', detail: '다운로드 준비됨' });
+      recordRender({
+        kind: 'mart',
+        durationSec: voice?.totalDur,
+        sizeBytes: blob.size,
+        storeName,
+      }).catch(() => undefined);
     } catch (e) {
       const msg = e instanceof Error ? e.message : '렌더링 실패';
       setError(msg);

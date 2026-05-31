@@ -32,25 +32,52 @@ export default async function AdminPage() {
     storeName: string;
     businessType: string;
     createdAt: string;
+    renderCount: number;
+    lastRenderAt: string | null;
   }> = [];
   let listError: string | null = null;
   try {
     const admin = createAdminClient();
     const { data, error } = await admin.auth.admin.listUsers({ perPage: 200 });
     if (error) throw error;
-    userList = data.users.map((u) => ({
-      id: u.id,
-      username: emailToUsername(u.email) || '(이름 없음)',
-      storeName:
-        typeof u.user_metadata?.storeName === 'string'
-          ? u.user_metadata.storeName
-          : '',
-      businessType:
-        typeof u.user_metadata?.businessType === 'string'
-          ? u.user_metadata.businessType
-          : '',
-      createdAt: u.created_at,
-    }));
+
+    // 사용자별 렌더 카운트 집계 (service_role 키로 RLS 우회)
+    const renderCountByUser = new Map<string, { count: number; last: string | null }>();
+    try {
+      const { data: renders } = await admin
+        .from('user_renders')
+        .select('user_id, created_at')
+        .order('created_at', { ascending: false });
+      if (Array.isArray(renders)) {
+        for (const r of renders) {
+          const cur = renderCountByUser.get(r.user_id) ?? { count: 0, last: null };
+          cur.count += 1;
+          if (!cur.last) cur.last = r.created_at;
+          renderCountByUser.set(r.user_id, cur);
+        }
+      }
+    } catch {
+      // 테이블이 아직 없으면 카운트만 0으로
+    }
+
+    userList = data.users.map((u) => {
+      const stats = renderCountByUser.get(u.id) ?? { count: 0, last: null };
+      return {
+        id: u.id,
+        username: emailToUsername(u.email) || '(이름 없음)',
+        storeName:
+          typeof u.user_metadata?.storeName === 'string'
+            ? u.user_metadata.storeName
+            : '',
+        businessType:
+          typeof u.user_metadata?.businessType === 'string'
+            ? u.user_metadata.businessType
+            : '',
+        createdAt: u.created_at,
+        renderCount: stats.count,
+        lastRenderAt: stats.last,
+      };
+    });
   } catch (e) {
     listError = e instanceof Error ? e.message : String(e);
   }

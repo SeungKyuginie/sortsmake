@@ -71,3 +71,29 @@ create policy "user_uploads_delete_own"
     bucket_id = 'user-uploads'
     and (storage.foldername(name))[2] = auth.uid()::text
   );
+
+-- 5) 사용자별 영상 제작 로그 (관리자 통계용)
+create table if not exists public.user_renders (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  kind text,
+  duration_sec int,
+  size_bytes bigint,
+  store_name text
+);
+
+create index if not exists user_renders_user_id_idx on public.user_renders(user_id);
+create index if not exists user_renders_created_at_idx on public.user_renders(created_at desc);
+
+alter table public.user_renders enable row level security;
+
+drop policy if exists "user_renders_select_own" on public.user_renders;
+create policy "user_renders_select_own"
+  on public.user_renders for select
+  using (auth.uid() = user_id);
+
+drop policy if exists "user_renders_insert_own" on public.user_renders;
+create policy "user_renders_insert_own"
+  on public.user_renders for insert
+  with check (auth.uid() = user_id);

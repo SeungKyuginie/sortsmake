@@ -20,6 +20,8 @@ type User = {
   storeName: string;
   businessType: string;
   createdAt: string;
+  renderCount: number;
+  lastRenderAt: string | null;
 };
 
 type Props = {
@@ -166,6 +168,12 @@ export function UserManager({ users, adminUsername }: Props) {
                     </div>
                     <div className="text-xs text-gray-500">
                       가입: {new Date(u.createdAt).toLocaleString('ko-KR')}
+                    </div>
+                    <div className="text-xs text-gray-700">
+                      🎬 영상 제작 <b>{u.renderCount}</b>회
+                      {u.lastRenderAt
+                        ? ` · 최근 ${new Date(u.lastRenderAt).toLocaleString('ko-KR')}`
+                        : ''}
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
