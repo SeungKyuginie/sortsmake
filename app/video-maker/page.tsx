@@ -8,6 +8,7 @@ import { PhotoUploader } from './PhotoUploader';
 import { LogoutButton } from './LogoutButton';
 import { getMyStoreName } from './me-actions';
 import { recordRender } from './render-log-actions';
+import { YoutubeUploadHelper } from './YoutubeUploadHelper';
 import {
   loadCloudState,
   saveCloudState,
@@ -2098,6 +2099,15 @@ export default function VideoMakerPage() {
             </div>
           </div>
         </section>
+      ) : null}
+
+      {/* YouTube 업로드 도우미 — 관리자 전용 베타 */}
+      {isAdmin && videoBlob ? (
+        <YoutubeUploadHelper
+          storeName={storeName}
+          script={script}
+          videoBlob={videoBlob}
+        />
       ) : null}
 
       <footer className="mt-10 text-center text-xs text-gray-400">
