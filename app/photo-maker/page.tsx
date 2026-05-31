@@ -457,6 +457,10 @@ export default function PhotoMakerPage() {
             bgmVolume,
             watermarkText:
               username === 'test' || username === 'test1' ? '데모용' : storeName,
+            watermarkPosition:
+              username === 'test' || username === 'test1' ? 'top' : 'bottom',
+            watermarkSize:
+              username === 'test' || username === 'test1' ? 80 : 40,
             hookText: '',
             hookStart: 0,
             hookEnd: 0,
@@ -498,6 +502,10 @@ export default function PhotoMakerPage() {
             bgmVolume,
             watermarkText:
               username === 'test' || username === 'test1' ? '데모용' : storeName,
+            watermarkPosition:
+              username === 'test' || username === 'test1' ? 'top' : 'bottom',
+            watermarkSize:
+              username === 'test' || username === 'test1' ? 80 : 40,
           },
           ({ ratio, message }) => {
             setRenderRatio(ratio);
