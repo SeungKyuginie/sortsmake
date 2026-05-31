@@ -61,15 +61,20 @@ async function uploadOnly(localPath, key, contentType = 'video/mp4') {
 function runFfmpeg(args, onLog) {
   return new Promise((resolve, reject) => {
     const ff = spawn('ffmpeg', args);
-    let lastErr = '';
+    let allErr = '';
     ff.stderr.on('data', (d) => {
       const s = d.toString();
-      lastErr = s;
+      allErr += s;
       if (onLog) onLog(s);
     });
     ff.on('close', (code) => {
       if (code === 0) resolve();
-      else reject(new Error(`ffmpeg exit ${code}: ${lastErr.slice(-1500)}`));
+      else {
+        // ffmpeg stderr 끝부분 (가장 의미 있는 에러)을 포함
+        const tail = allErr.slice(-3000);
+        console.error('[ffmpeg stderr full]', allErr);
+        reject(new Error(`ffmpeg exit ${code}: ${tail}`));
+      }
     });
     ff.on('error', reject);
   });
